@@ -55,7 +55,7 @@ function redditImage(post) {
   const galleryId = post.gallery_data?.items?.[0]?.media_id;
   const gallery = post.media_metadata?.[galleryId];
   const resolutions = preview?.resolutions ?? gallery?.p ?? [];
-  const sized = resolutions.find((image) => image.width >= 320 || image.x >= 320)
+  const sized = resolutions.find((image) => image.width >= 640 || image.x >= 640)
     ?? resolutions[resolutions.length - 1];
   const direct = post.url_overridden_by_dest ?? post.url;
   return imageUrl(sized?.url ?? sized?.u)

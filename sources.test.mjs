@@ -6,7 +6,9 @@ test("Reddit images: previews, galleries, crossposts, fallbacks, and missing ima
   const cases = [
     [{ preview: { images: [{ resolutions: [
       { width: 108, url: "https://preview.redd.it/small.jpg" },
-      { width: 320, url: "https://preview.redd.it/image.jpg?a=1&amp;b=2" },
+      { width: 320, url: "https://preview.redd.it/medium.jpg" },
+      { width: 640, url: "https://preview.redd.it/image.jpg?a=1&amp;b=2" },
+      { width: 960, url: "https://preview.redd.it/large.jpg" },
     ] }] } }, "https://preview.redd.it/image.jpg?a=1&b=2"],
     [{ preview: { images: [{ source: { url: "https://i.redd.it/source.jpg" } }] } }, "https://i.redd.it/source.jpg"],
     [{ gallery_data: { items: [{ media_id: "first" }] }, media_metadata: {
