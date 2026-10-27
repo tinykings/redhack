@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
-function setup(savedView = null) {
+function setup(savedView = null, savedOptions = null) {
   function makeFeed(prefix) {
     const feed = {
       scrollTop: 0,
+      replaceChildren(...children) { this.children = children; },
       clientTop: 0,
       getBoundingClientRect: () => ({ top: 100 }),
       scrollTo(options) { this.lastScroll = options; this.scrollTop = options.top; },
@@ -41,9 +42,15 @@ function setup(savedView = null) {
   }));
   let keyHandler;
   const stored = new Map(savedView === null ? [] : [["feedView", savedView]]);
+  if (savedOptions !== null) stored.set("redditOptions", savedOptions);
+  const controls = Object.fromEntries(["reddit-sort", "reddit-timeframe"].map((id) => [id, {
+    handlers: {},
+    addEventListener(type, handler) { this.handlers[type] = handler; },
+  }]));
   const windowEvents = {};
   const opened = [];
   const context = vm.createContext({
+    CONFIG: { redditTimeWindow: "day" },
     localStorage: {
       getItem: (key) => stored.get(key) ?? null,
       setItem: (key, value) => stored.set(key, value),
@@ -55,7 +62,7 @@ function setup(savedView = null) {
       open(...args) { opened.push(args); },
     },
     document: {
-      getElementById: (id) => feeds[id.replace(/-feed$/, "")] ?? { addEventListener() {} },
+      getElementById: (id) => controls[id] ?? feeds[id.replace(/-feed$/, "")] ?? { addEventListener() {} },
       querySelectorAll: () => columns,
       addEventListener(type, handler) { keyHandler = handler; },
     },
@@ -71,7 +78,7 @@ function setup(savedView = null) {
     keyHandler(event);
     return event;
   }
-  return { feeds, columns, press, stored, windowEvents, opened, context };
+  return { feeds, columns, press, stored, windowEvents, opened, context, controls };
 }
 
 test("j/k follow hovered column, preserve independent selection, and scroll only that list", () => {
@@ -158,6 +165,29 @@ test("scroll and selection survive reload; user scrolling stops image restoratio
   const reloaded = setup(app.stored.get("feedView"));
   vm.runInContext('restoreScroll("reddit");', reloaded.context);
   assert.equal(reloaded.feeds.reddit.scrollTop, 700);
+});
+
+test("Reddit controls default to Best, persist Top timeframe, and reset only Reddit view", () => {
+  const app = setup();
+  const sort = app.controls["reddit-sort"];
+  const timeframe = app.controls["reddit-timeframe"];
+  assert.equal(sort.value, "best");
+  assert.equal(timeframe.hidden, true);
+  sort.value = "top";
+  sort.handlers.change();
+  assert.equal(timeframe.hidden, false);
+  timeframe.value = "week";
+  timeframe.handlers.change();
+  assert.deepEqual(JSON.parse(app.stored.get("redditOptions")), { sort: "top", timeframe: "week" });
+  assert.equal(app.feeds.reddit.children.length, 0);
+  assert.equal(app.feeds.hn.children.length, 3);
+  const reloaded = setup(null, app.stored.get("redditOptions"));
+  assert.equal(reloaded.controls["reddit-sort"].value, "top");
+  assert.equal(reloaded.controls["reddit-timeframe"].value, "week");
+  assert.equal(reloaded.controls["reddit-timeframe"].hidden, false);
+  sort.value = "new";
+  sort.handlers.change();
+  assert.equal(timeframe.hidden, true);
 });
 
 test("invalid saved state falls back safely", () => {

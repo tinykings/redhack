@@ -6,7 +6,8 @@ Browser extension combining top posts from your subscribed subreddits with Hacke
 
 - Alternates Reddit and Hacker News posts, up to 100 items by default.
 - Removes duplicate URLs and fills remaining slots when one source runs short.
-- Fetches Reddit’s top posts for today, capped at five per subreddit; excludes pinned and NSFW posts.
+- Reddit sort picker: **Best** (default, personalized home ranking), **Top** with timeframe, or **New**. Choice persists across reloads.
+- Caps Reddit posts at five per subreddit; excludes pinned and NSFW posts.
 - Shows scores, comment links, post ages, and available Reddit image previews.
 - Follows your system’s light or dark theme.
 - Caches results locally for 15 minutes. **Refresh** bypasses the cache.
@@ -39,7 +40,8 @@ Firefox temporary installations last until the browser restarts.
 
 1. Log in to [Reddit](https://www.reddit.com/login) in the same browser profile and subscribe to at least one subreddit.
 2. Click the **RedHack Feed** toolbar button.
-3. Click **Refresh** to fetch fresh posts.
+3. Choose **Best**, **Top**, or **New** beside the Reddit heading. **Top** offers past hour/day/week/month/year or all time.
+4. Click **Refresh** to fetch fresh posts.
 
 No Reddit API keys or Hacker News account required. Reddit requests use your existing browser session. If subscriptions cannot be read, the feed shows a login notice and can still display Hacker News posts.
 
@@ -62,10 +64,10 @@ Cache lifetime is controlled by `CACHE_TTL_MS` in `feed.js`. Reload the extensio
 
 No package installation required. Load the project as an unpacked or temporary extension to test browser behavior.
 
-Run the image extraction test with Node.js 22 or later:
+Run tests with Node.js 22 or later:
 
 ```sh
-node --experimental-default-type=module --test sources.test.mjs
+node --experimental-default-type=module --test *.test.mjs
 ```
 
 Tests mock network requests and cover Reddit previews, galleries, crossposts, direct images, thumbnails, and invalid or missing image URLs.

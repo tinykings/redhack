@@ -66,7 +66,9 @@ function redditImage(post) {
     ?? imageUrl(post.thumbnail);
 }
 
-export async function fetchReddit(limit) {
+export async function fetchReddit(limit, { sort = "best", timeframe = CONFIG.redditTimeWindow } = {}) {
+  if (!["best", "top", "new"].includes(sort)) throw new Error("Invalid Reddit sort");
+  if (!["hour", "day", "week", "month", "year", "all"].includes(timeframe)) throw new Error("Invalid Reddit timeframe");
   const subs = await getSubscriptions();
 
   const chunks = [];
@@ -74,17 +76,19 @@ export async function fetchReddit(limit) {
     chunks.push(subs.slice(i, i + CONFIG.subsPerRequest));
   }
 
-  const listings = await Promise.all(
-    chunks.map((chunk) => {
-      const params = new URLSearchParams({ t: CONFIG.redditTimeWindow, limit: "100", raw_json: "1" });
-      return getJson(`${REDDIT}/r/${chunk.join("+")}/top.json?${params}`);
-    })
-  );
+  const params = new URLSearchParams({ limit: "100", raw_json: "1" });
+  if (sort === "top") params.set("t", timeframe);
+  // Best is Reddit's personalized home ranking, not a subreddit listing sort.
+  const urls = sort === "best"
+    ? [`${REDDIT}/best.json?${params}`]
+    : chunks.map((chunk) => `${REDDIT}/r/${chunk.join("+")}/${sort}.json?${params}`);
+  const listings = await Promise.all(urls.map(getJson));
 
   const posts = listings
     .flatMap((l) => l.data.children.map((c) => c.data))
-    .filter((p) => !p.stickied && !p.over_18)
-    .sort((a, b) => b.score - a.score);
+    .filter((p) => !p.stickied && !p.over_18);
+  if (sort === "top") posts.sort((a, b) => b.score - a.score);
+  if (sort === "new") posts.sort((a, b) => b.created_utc - a.created_utc);
 
   const perSub = new Map();
   const picked = [];

@@ -10,6 +10,20 @@ const $feeds = {
 const $status = document.getElementById("status");
 const $notice = document.getElementById("notice");
 const $refresh = document.getElementById("refresh");
+const $redditSort = document.getElementById("reddit-sort");
+const $redditTimeframe = document.getElementById("reddit-timeframe");
+const REDDIT_OPTIONS_KEY = "redditOptions";
+let redditOptions = { sort: "best", timeframe: CONFIG.redditTimeWindow };
+try {
+  const saved = JSON.parse(localStorage.getItem(REDDIT_OPTIONS_KEY));
+  if (["best", "top", "new"].includes(saved?.sort)) redditOptions.sort = saved.sort;
+  if (["hour", "day", "week", "month", "year", "all"].includes(saved?.timeframe)) redditOptions.timeframe = saved.timeframe;
+} catch { /* Keep defaults when storage is unavailable or invalid. */ }
+$redditSort.value = redditOptions.sort;
+$redditTimeframe.value = redditOptions.timeframe;
+$redditTimeframe.hidden = redditOptions.sort !== "top";
+let loadVersion = 0;
+
 const VIEW_KEY = "feedView";
 let savedView = {};
 try {
@@ -167,11 +181,17 @@ function showNotice(...content) {
 }
 
 async function load({ force = false } = {}) {
+  const version = ++loadVersion;
+  const options = { ...redditOptions };
+  const redditCacheKey = options.sort === "top" ? `top:${options.timeframe}` : options.sort;
   $notice.hidden = true;
-  const { [CACHE_KEY]: cache } = await chrome.storage.local.get(CACHE_KEY);
+  const { [CACHE_KEY]: storedCache } = await chrome.storage.local.get(CACHE_KEY);
+  if (version !== loadVersion) return;
+  const cache = storedCache?.redditCacheKey === redditCacheKey ? storedCache : null;
   if (cache) render(cache.posts);
   if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     $status.textContent = `Updated ${timeAgo(cache.fetchedAt / 1000)}`;
+    $refresh.disabled = false;
     return;
   }
 
@@ -180,9 +200,11 @@ async function load({ force = false } = {}) {
 
   // Ask each source for the full total so either can fill in if the other comes up short.
   const [reddit, hn] = await Promise.allSettled([
-    fetchReddit(CONFIG.totalItems),
+    fetchReddit(CONFIG.totalItems, options),
     fetchHackerNews(CONFIG.totalItems),
   ]);
+
+  if (version !== loadVersion) return;
 
   if (reddit.status === "rejected") {
     console.error("Reddit fetch failed:", reddit.reason);
@@ -206,8 +228,9 @@ async function load({ force = false } = {}) {
 
   // Only replace a good cache when both sources came back.
   if (reddit.status === "fulfilled" && hn.status === "fulfilled") {
-    await chrome.storage.local.set({ [CACHE_KEY]: { fetchedAt: Date.now(), posts } });
+    await chrome.storage.local.set({ [CACHE_KEY]: { fetchedAt: Date.now(), redditCacheKey, posts } });
   }
+  if (version !== loadVersion) return;
   if (posts.length || !cache) render(posts);
 
   const counts = { reddit: 0, hn: 0 };
@@ -216,6 +239,20 @@ async function load({ force = false } = {}) {
   $refresh.disabled = false;
 }
 
+function changeRedditOptions() {
+  redditOptions = { sort: $redditSort.value, timeframe: $redditTimeframe.value };
+  $redditTimeframe.hidden = redditOptions.sort !== "top";
+  try { localStorage.setItem(REDDIT_OPTIONS_KEY, JSON.stringify(redditOptions)); } catch { /* Keep browsing. */ }
+  currentPostIds.reddit = null;
+  pendingScroll.reddit = 0;
+  $feeds.reddit.replaceChildren();
+  restoreScroll("reddit");
+  scheduleSave();
+  load();
+}
+
+$redditSort.addEventListener("change", changeRedditOptions);
+$redditTimeframe.addEventListener("change", changeRedditOptions);
 document.addEventListener("keydown", navigatePosts);
 $refresh.addEventListener("click", () => load({ force: true }));
 load();

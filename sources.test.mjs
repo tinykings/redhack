@@ -2,6 +2,44 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fetchReddit } from "./sources.js";
 
+test("Reddit sort uses personalized Best, score-ranked Top with timeframe, and chronological New", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (url) => {
+    requests.push(new URL(url));
+    return {
+      ok: true,
+      json: async () => url.includes("/subreddits/mine/")
+        ? { data: { children: [{ data: { display_name: "test" } }], after: null } }
+        : { data: { children: [
+          { name: "first", score: 5, created_utc: 10 },
+          { name: "popular", score: 100, created_utc: 20 },
+          { name: "newest", score: 1, created_utc: 30 },
+        ].map((post) => ({ data: {
+          ...post, subreddit: "test", permalink: `/r/test/comments/${post.name}`,
+          url: `https://example.com/${post.name}`,
+        } })) } },
+    };
+  };
+  try {
+    assert.deepEqual((await fetchReddit(3)).map((post) => post.id), ["first", "popular", "newest"]);
+    assert.equal(requests.at(-1).pathname, "/best.json");
+    assert.equal(requests.at(-1).searchParams.has("t"), false);
+    for (const timeframe of ["hour", "day", "week", "month", "year", "all"]) {
+      assert.deepEqual((await fetchReddit(3, { sort: "top", timeframe })).map((post) => post.id), ["popular", "first", "newest"]);
+      assert.equal(requests.at(-1).pathname, "/r/test/top.json");
+      assert.equal(requests.at(-1).searchParams.get("t"), timeframe);
+    }
+    assert.deepEqual((await fetchReddit(3, { sort: "new" })).map((post) => post.id), ["newest", "popular", "first"]);
+    assert.equal(requests.at(-1).pathname, "/r/test/new.json");
+    assert.equal(requests.at(-1).searchParams.has("t"), false);
+    await assert.rejects(fetchReddit(3, { sort: "invalid" }), /Invalid Reddit sort/);
+    await assert.rejects(fetchReddit(3, { sort: "top", timeframe: "invalid" }), /Invalid Reddit timeframe/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Reddit images: previews, galleries, crossposts, fallbacks, and missing images", async () => {
   const cases = [
     [{ preview: { images: [{ resolutions: [

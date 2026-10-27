@@ -15,7 +15,22 @@
   <div id="notice" hidden></div>
   <main id="feeds" title="Hover a column: j/k navigate · Enter opens post · c opens comments (new tabs)">
     <section class="feed-column" data-source="reddit" aria-labelledby="reddit-heading">
-      <h2 id="reddit-heading">Reddit</h2>
+      <div class="feed-heading">
+        <h2 id="reddit-heading">Reddit</h2>
+        <select id="reddit-sort" aria-label="Reddit sort">
+          <option value="best">Best</option>
+          <option value="top">Top</option>
+          <option value="new">New</option>
+        </select>
+        <select id="reddit-timeframe" aria-label="Reddit Top timeframe" hidden>
+          <option value="hour">Past hour</option>
+          <option value="day" selected>Past day</option>
+          <option value="week">Past week</option>
+          <option value="month">Past month</option>
+          <option value="year">Past year</option>
+          <option value="all">All time</option>
+        </select>
+      </div>
       <ol id="reddit-feed" class="post-list" aria-labelledby="reddit-heading" tabindex="0"></ol>
     </section>
     <section class="feed-column" data-source="hn" aria-labelledby="hn-heading">

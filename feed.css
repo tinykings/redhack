@@ -2,7 +2,7 @@
   --bg: #f6f6f4;
   --card-bg: #ffffff;
   --hn-card-bg: #fff3e5;
-  --selection: #286ac7;
+  --reddit-selection: #286ac7;
   --fg: #1d1d1b;
   --muted: #6b6b66;
   --line: #e2e2dd;
@@ -16,7 +16,7 @@
     --bg: #242424;
     --card-bg: #2e2e2e;
     --hn-card-bg: #3b3026;
-    --selection: #83b4ff;
+    --reddit-selection: #83b4ff;
     --fg: #e8e8e3;
     --muted: #9a9a93;
     --line: #2b2b29;
@@ -90,6 +90,9 @@ button:disabled { opacity: 0.5; cursor: default; }
   min-width: 0;
 }
 
+.feed-column[data-source="reddit"] { --selection: var(--reddit-selection); }
+.feed-column[data-source="hn"] { --selection: var(--hn); }
+
 .feed-column + .feed-column { border-left: 1px solid var(--line); }
 
 .feed-column h2 {
@@ -102,6 +105,24 @@ button:disabled { opacity: 0.5; cursor: default; }
 .feed-column.active-column h2 {
   background: var(--card-bg);
   border-bottom-color: var(--selection);
+}
+.feed-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 6px 6px;
+}
+.feed-heading h2 { margin: 0; }
+.feed-heading select {
+  max-width: 100%;
+  font: inherit;
+  font-size: 14px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--card-bg);
+  color: var(--fg);
 }
 #reddit-heading { color: var(--reddit); }
 #hn-heading { color: var(--hn); }
