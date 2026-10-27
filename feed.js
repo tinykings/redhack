@@ -10,27 +10,78 @@ const $feeds = {
 const $status = document.getElementById("status");
 const $notice = document.getElementById("notice");
 const $refresh = document.getElementById("refresh");
-const currentPostIds = { reddit: null, hn: null };
+const VIEW_KEY = "feedView";
+let savedView = {};
+try {
+  savedView = JSON.parse(localStorage.getItem(VIEW_KEY)) ?? {};
+} catch { /* Storage may be unavailable or invalid. */ }
+const currentPostIds = {};
+const pendingScroll = {};
+for (const source of Object.keys($feeds)) {
+  const saved = savedView[source];
+  currentPostIds[source] = typeof saved?.postId === "string" ? saved.postId : null;
+  pendingScroll[source] = Number.isFinite(saved?.scrollTop) ? Math.max(0, saved.scrollTop) : 0;
+}
 let activeSource = null;
+let saveTimer;
+
+function saveView() {
+  const view = {};
+  for (const [source, feed] of Object.entries($feeds)) {
+    view[source] = { postId: currentPostIds[source], scrollTop: pendingScroll[source] ?? feed.scrollTop };
+  }
+  try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* Keep browsing without persistence. */ }
+}
+
+function scheduleSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveView, 150);
+}
+
+function restoreScroll(source) {
+  if (pendingScroll[source] !== null) $feeds[source].scrollTop = pendingScroll[source];
+}
 
 for (const column of document.querySelectorAll(".feed-column")) {
-  column.addEventListener("pointerenter", () => { activeSource = column.dataset.source; });
-  column.addEventListener("pointerleave", () => { activeSource = null; });
+  const source = column.dataset.source;
+  const feed = $feeds[source];
+  column.addEventListener("pointerenter", () => {
+    activeSource = source;
+    column.classList.add("active-column");
+  });
+  column.addEventListener("pointerleave", () => {
+    activeSource = null;
+    column.classList.remove("active-column");
+  });
+  // Stop delayed image restoration as soon as the user takes control.
+  for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
+    feed.addEventListener(type, () => { pendingScroll[source] = null; }, { passive: true });
+  }
+  feed.addEventListener("scroll", scheduleSave, { passive: true });
 }
+window.addEventListener("pagehide", saveView);
 
 function navigatePosts(event) {
   if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
-    || event.isComposing || !["j", "k"].includes(event.key)) return;
+    || event.isComposing || !["j", "k", "Enter", "c"].includes(event.key)) return;
   if (event.target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox']")) return;
 
+  if (event.key === "Enter" && event.target.closest("a, button, summary, [role='button']")) return;
   if (!activeSource) return;
   const source = activeSource;
   const feed = $feeds[source];
   const cards = Array.from(feed.children);
   if (!cards.length) return;
-  event.preventDefault();
-
   const current = cards.findIndex((card) => card.dataset.postId === currentPostIds[source]);
+  if (event.key === "Enter" || event.key === "c") {
+    if (current < 0 || event.repeat) return;
+    event.preventDefault();
+    const card = cards[current];
+    window.open(event.key === "c" ? card.dataset.commentsUrl : card.dataset.url, "_blank", "noopener,noreferrer");
+    return;
+  }
+  event.preventDefault();
+  pendingScroll[source] = null;
   const next = current < 0 ? 0 : Math.max(0, Math.min(cards.length - 1, current + (event.key === "j" ? 1 : -1)));
   const card = cards[next];
   for (const item of cards) item.classList.toggle("current", item === card);
@@ -40,6 +91,7 @@ function navigatePosts(event) {
     top: feed.scrollTop + card.getBoundingClientRect().top - feed.getBoundingClientRect().top - feed.clientTop - 6,
     behavior: "instant",
   });
+  scheduleSave();
 }
 
 function timeAgo(unixSeconds) {
@@ -61,6 +113,7 @@ function el(tag, props = {}, ...children) {
 
 function render(posts) {
   for (const [source, feed] of Object.entries($feeds)) {
+    pendingScroll[source] ??= feed.scrollTop;
     feed.replaceChildren(...posts.filter((p) => p.source === source).map((p) => {
       const domain = new URL(p.url).hostname.replace(/^www\./, "");
       const isDiscussion = p.url === p.commentsUrl;
@@ -78,7 +131,11 @@ function render(posts) {
           href: p.url,
           "ariaLabel": `View image: ${p.title}`,
         }, image);
-        image.addEventListener("error", () => preview.remove(), { once: true });
+        image.addEventListener("load", () => restoreScroll(source), { once: true });
+        image.addEventListener("error", () => {
+          preview.remove();
+          restoreScroll(source);
+        }, { once: true });
       }
       const card = el(
         "li",
@@ -96,8 +153,11 @@ function render(posts) {
         )
       );
       card.dataset.postId = p.id;
+      card.dataset.url = p.url;
+      card.dataset.commentsUrl = p.commentsUrl;
       return card;
     }));
+    restoreScroll(source);
   }
 }
 
