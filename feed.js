@@ -3,10 +3,44 @@ import { CONFIG, NotLoggedInError, fetchReddit, fetchHackerNews, interleave } fr
 const CACHE_KEY = "feedCache";
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
-const $feed = document.getElementById("feed");
+const $feeds = {
+  reddit: document.getElementById("reddit-feed"),
+  hn: document.getElementById("hn-feed"),
+};
 const $status = document.getElementById("status");
 const $notice = document.getElementById("notice");
 const $refresh = document.getElementById("refresh");
+const currentPostIds = { reddit: null, hn: null };
+let activeSource = null;
+
+for (const column of document.querySelectorAll(".feed-column")) {
+  column.addEventListener("pointerenter", () => { activeSource = column.dataset.source; });
+  column.addEventListener("pointerleave", () => { activeSource = null; });
+}
+
+function navigatePosts(event) {
+  if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
+    || event.isComposing || !["j", "k"].includes(event.key)) return;
+  if (event.target.closest("input, textarea, select, [contenteditable]:not([contenteditable='false']), [role='textbox']")) return;
+
+  if (!activeSource) return;
+  const source = activeSource;
+  const feed = $feeds[source];
+  const cards = Array.from(feed.children);
+  if (!cards.length) return;
+  event.preventDefault();
+
+  const current = cards.findIndex((card) => card.dataset.postId === currentPostIds[source]);
+  const next = current < 0 ? 0 : Math.max(0, Math.min(cards.length - 1, current + (event.key === "j" ? 1 : -1)));
+  const card = cards[next];
+  for (const item of cards) item.classList.toggle("current", item === card);
+  currentPostIds[source] = card.dataset.postId;
+  card.focus({ preventScroll: true });
+  feed.scrollTo({
+    top: feed.scrollTop + card.getBoundingClientRect().top - feed.getBoundingClientRect().top - feed.clientTop - 6,
+    behavior: "instant",
+  });
+}
 
 function timeAgo(unixSeconds) {
   const s = Math.max(0, Date.now() / 1000 - unixSeconds);
@@ -26,8 +60,8 @@ function el(tag, props = {}, ...children) {
 }
 
 function render(posts) {
-  $feed.replaceChildren(
-    ...posts.map((p) => {
+  for (const [source, feed] of Object.entries($feeds)) {
+    feed.replaceChildren(...posts.filter((p) => p.source === source).map((p) => {
       const domain = new URL(p.url).hostname.replace(/^www\./, "");
       const isDiscussion = p.url === p.commentsUrl;
       let preview = "";
@@ -46,9 +80,9 @@ function render(posts) {
         }, image);
         image.addEventListener("error", () => preview.remove(), { once: true });
       }
-      return el(
+      const card = el(
         "li",
-        { className: p.source },
+        { className: `${p.source}${p.id === currentPostIds[source] ? " current" : ""}`, tabIndex: -1 },
         preview,
         el("a", { className: "title", href: p.url, textContent: p.title }),
         isDiscussion ? "" : el("span", { className: "domain", textContent: domain }),
@@ -61,8 +95,10 @@ function render(posts) {
           ` · ${timeAgo(p.created)}`
         )
       );
-    })
-  );
+      card.dataset.postId = p.id;
+      return card;
+    }));
+  }
 }
 
 function showNotice(...content) {
@@ -120,5 +156,6 @@ async function load({ force = false } = {}) {
   $refresh.disabled = false;
 }
 
+document.addEventListener("keydown", navigatePosts);
 $refresh.addEventListener("click", () => load({ force: true }));
 load();

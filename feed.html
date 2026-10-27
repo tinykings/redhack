@@ -13,7 +13,16 @@
     <button id="refresh" type="button">Refresh</button>
   </header>
   <div id="notice" hidden></div>
-  <ol id="feed"></ol>
+  <main id="feeds">
+    <section class="feed-column" data-source="reddit" aria-labelledby="reddit-heading">
+      <h2 id="reddit-heading">Reddit</h2>
+      <ol id="reddit-feed" class="post-list" aria-labelledby="reddit-heading" tabindex="0"></ol>
+    </section>
+    <section class="feed-column" data-source="hn" aria-labelledby="hn-heading">
+      <h2 id="hn-heading">Hacker News</h2>
+      <ol id="hn-feed" class="post-list" aria-labelledby="hn-heading" tabindex="0"></ol>
+    </section>
+  </main>
   <script type="module" src="feed.js"></script>
 </body>
 </html>
