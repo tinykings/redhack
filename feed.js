@@ -30,9 +30,26 @@ function render(posts) {
     ...posts.map((p) => {
       const domain = new URL(p.url).hostname.replace(/^www\./, "");
       const isDiscussion = p.url === p.commentsUrl;
+      let preview = "";
+      if (p.image) {
+        const image = el("img", {
+          src: p.image,
+          alt: "",
+          loading: "lazy",
+          decoding: "async",
+          referrerPolicy: "no-referrer",
+        });
+        preview = el("a", {
+          className: "preview",
+          href: p.url,
+          "ariaLabel": `View image: ${p.title}`,
+        }, image);
+        image.addEventListener("error", () => preview.remove(), { once: true });
+      }
       return el(
         "li",
         { className: p.source },
+        preview,
         el("a", { className: "title", href: p.url, textContent: p.title }),
         isDiscussion ? "" : el("span", { className: "domain", textContent: domain }),
         el(

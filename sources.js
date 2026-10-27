@@ -1,6 +1,6 @@
 // Fetching and normalizing posts from Reddit and Hacker News.
 // Every post is normalized to:
-//   { source, id, title, url, commentsUrl, score, comments, created, label }
+//   { source, id, title, url, commentsUrl, score, comments, created, label, image? }
 
 export const CONFIG = {
   totalItems: 100,
@@ -37,6 +37,33 @@ async function getSubscriptions() {
   // Reddit answers anonymous requests with an empty listing rather than an error.
   if (subs.length === 0) throw new NotLoggedInError("no subscriptions returned");
   return subs;
+}
+
+function imageUrl(value) {
+  if (typeof value !== "string") return null;
+  const decoded = value.replace(/&amp;/g, "&");
+  try {
+    const url = new URL(decoded);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function redditImage(post) {
+  const preview = post.preview?.images?.[0];
+  const galleryId = post.gallery_data?.items?.[0]?.media_id;
+  const gallery = post.media_metadata?.[galleryId];
+  const resolutions = preview?.resolutions ?? gallery?.p ?? [];
+  const sized = resolutions.find((image) => image.width >= 320 || image.x >= 320)
+    ?? resolutions[resolutions.length - 1];
+  const direct = post.url_overridden_by_dest ?? post.url;
+  return imageUrl(sized?.url ?? sized?.u)
+    ?? imageUrl(preview?.source?.url)
+    ?? imageUrl(gallery?.s?.u)
+    ?? (/\.(?:jpe?g|png|gif|webp)(?:[?#]|$)/i.test(direct ?? "") ? imageUrl(direct) : null)
+    ?? (post.crosspost_parent_list?.[0] ? redditImage(post.crosspost_parent_list[0]) : null)
+    ?? imageUrl(post.thumbnail);
 }
 
 export async function fetchReddit(limit) {
@@ -76,6 +103,7 @@ export async function fetchReddit(limit) {
       comments: p.num_comments,
       created: p.created_utc,
       label: `r/${p.subreddit}`,
+      image: redditImage(p),
     });
     if (picked.length >= limit) break;
   }
