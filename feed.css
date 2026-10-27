@@ -10,7 +10,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #161615;
+    --bg: #242424;
     --fg: #e8e8e3;
     --muted: #9a9a93;
     --line: #2b2b29;
@@ -24,7 +24,7 @@
 
 body {
   margin: 0 auto;
-  max-width: 820px;
+  max-width: 1200px;
   padding: 0 16px 48px;
   background: var(--bg);
   color: var(--fg);
@@ -69,11 +69,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 #feed li {
   display: flow-root;
-  padding: 10px 0 10px 12px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--line);
-  border-left: 3px solid var(--reddit);
 }
-#feed li.hn { border-left-color: var(--hn); }
 
 .preview {
   float: right;
