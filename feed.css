@@ -78,7 +78,7 @@ button:disabled { opacity: 0.5; cursor: default; }
 #feeds {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 20px;
+  gap: 0;
   flex: 1;
   min-height: 0;
 }
@@ -90,6 +90,8 @@ button:disabled { opacity: 0.5; cursor: default; }
   min-width: 0;
 }
 
+.feed-column + .feed-column { border-left: 1px solid var(--line); }
+
 .feed-column h2 { margin: 12px 6px 6px; font-size: 17px; }
 #reddit-heading { color: var(--reddit); }
 #hn-heading { color: var(--hn); }
@@ -99,19 +101,20 @@ button:disabled { opacity: 0.5; cursor: default; }
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  scrollbar-gutter: stable;
+  scrollbar-width: none;
   list-style: none;
   margin: 0;
   padding: 6px;
   overflow-wrap: anywhere;
 }
 
+.post-list::-webkit-scrollbar { display: none; }
+
 /* Enough trailing space to align even the last card at the top. */
 .post-list::after { content: ""; display: block; height: 100%; }
 
 @media (max-width: 600px) {
   body { padding: 0 8px; }
-  #feeds { gap: 8px; }
   .feed-column .post-list li { padding: 10px; }
 }
 
