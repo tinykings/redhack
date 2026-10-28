@@ -97,8 +97,6 @@ function setup(savedView = null, savedOptions = null) {
     // Leave initial loading pending; these tests exercise navigation only.
     chrome: {
       storage: { local: { get: () => new Promise(() => {}) } },
-      runtime: { getURL: () => "chrome-extension://test-extension/" },
-      declarativeNetRequest: { async updateSessionRules(rules) { context.embedRules = rules; } },
     },
   });
   vm.runInContext(readFileSync(new URL("./feed.js", import.meta.url), "utf8").replace(/^import .*\n/, ""), context);
@@ -273,7 +271,7 @@ test("Reddit controls default to Best, persist Top timeframe, and reset only Red
   assert.equal(timeframe.hidden, true);
 });
 
-test("YouTube preview and Enter play inline; c keeps external comments link", async () => {
+test("YouTube thumbnail, title, and Enter open video in new tabs; c opens comments", () => {
   const app = setup();
   app.context.posts = [{
     source: "youtube", id: "yt_abcdefghijk", videoId: "abcdefghijk", title: "Video",
@@ -283,32 +281,22 @@ test("YouTube preview and Enter play inline; c keeps external comments link", as
   vm.runInContext("render(posts)", app.context);
   const card = app.feeds.youtube.children[0];
   const preview = card.querySelector(".video-preview");
-  assert.equal(preview.tagName, "button");
-  await preview.handlers.click();
-  // Event handler need not return playback promise; allow its continuation to run.
-  await Promise.resolve();
-  assert.equal(preview.hidden, true);
-  assert.equal(preview.afterNode.tagName, "iframe");
-  assert.equal(preview.afterNode.src, "https://www.youtube-nocookie.com/embed/abcdefghijk?autoplay=1&rel=0");
-  assert.equal(app.context.embedRules.addRules[1].condition.urlFilter, "|https://www.youtube-nocookie.com/embed/");
-  assert.equal(app.context.embedRules.addRules[1].action.requestHeaders[0].header, "Referer");
-  const retry = preview.afterNodes[1].children[0];
-  assert.equal(retry.textContent, "Try standard player");
-  await retry.handlers.click();
-  await Promise.resolve();
-  assert.equal(preview.afterNode.src, "https://www.youtube.com/embed/abcdefghijk?autoplay=1&rel=0");
-  assert.equal(preview.afterNodes[1].children[0].textContent, "Try privacy player");
-  const condition = app.context.embedRules.addRules[0].condition;
-  assert.equal(condition.initiatorDomains[0], "test-extension");
-  assert.equal(condition.resourceTypes[0], "sub_frame");
+  for (const link of [preview, card.querySelector(".title")]) {
+    assert.equal(link.tagName, "a");
+    assert.equal(link.href, app.context.posts[0].url);
+    assert.equal(link.target, "_blank");
+    assert.equal(link.rel, "noopener noreferrer");
+  }
+  assert.equal(preview.children[0].src, app.context.posts[0].image);
+  assert.equal(preview.ariaLabel, "Watch on YouTube: Video");
+  assert.equal(preview.handlers.click, undefined);
   app.columns[2].handlers.pointerenter();
   // Render mocks do not implement scrolling/focus. Test Enter using saved selection.
   vm.runInContext('currentPostIds.youtube = "yt_abcdefghijk"', app.context);
   assert.equal(app.press("Enter").prevented, true);
-  await Promise.resolve();
-  assert.equal(app.opened.length, 0);
+  assert.deepEqual(app.opened[0], [app.context.posts[0].url, "_blank", "noopener,noreferrer"]);
   app.press("c");
-  assert.equal(app.opened[0][0], app.context.posts[0].commentsUrl);
+  assert.equal(app.opened[1][0], app.context.posts[0].commentsUrl);
 });
 
 test("YouTube column uses independent j/k navigation", () => {

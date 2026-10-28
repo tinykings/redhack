@@ -120,8 +120,7 @@ function navigatePosts(event) {
     if (current < 0 || event.repeat) return;
     event.preventDefault();
     const card = cards[current];
-    if (source === "youtube" && event.key === "Enter") playVideo(card);
-    else window.open(event.key === "c" ? card.dataset.commentsUrl : card.dataset.url, "_blank", "noopener,noreferrer");
+    window.open(event.key === "c" ? card.dataset.commentsUrl : card.dataset.url, "_blank", "noopener,noreferrer");
     return;
   }
   event.preventDefault();
@@ -158,60 +157,6 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-let embedSetup;
-async function playVideo(card, standard = false) {
-  const id = card.dataset.videoId;
-  if (!/^[\w-]{11}$/.test(id ?? "")) return;
-  // YouTube rejects extension-origin embeds without an HTTP(S) Referer (error 153).
-  // Scope this header to embeds initiated by this extension, not ordinary browsing.
-  try {
-    embedSetup ??= chrome.declarativeNetRequest.updateSessionRules({
-      removeRuleIds: [1, 2],
-      addRules: ["www.youtube.com", "www.youtube-nocookie.com"].map((host, index) => ({
-        id: index + 1, priority: 1,
-        action: { type: "modifyHeaders", requestHeaders: [
-          { header: "Referer", operation: "set", value: "https://www.youtube.com/" },
-        ] },
-        condition: {
-          urlFilter: `|https://${host}/embed/`,
-          resourceTypes: ["sub_frame"],
-          initiatorDomains: [new URL(chrome.runtime.getURL("/")).hostname],
-        },
-      })),
-    });
-    await embedSetup;
-  } catch (error) {
-    embedSetup = null;
-    showNotice(`Couldn't set up YouTube playback: ${error.message}. Use Open on YouTube instead.`);
-    return;
-  }
-  if (!card.isConnected) return;
-  // One active player; replacing/removing an iframe stops its audio.
-  for (const player of document.querySelectorAll(".video-player")) {
-    player.remove();
-  }
-  for (const controls of document.querySelectorAll(".video-controls")) controls.remove();
-  for (const preview of document.querySelectorAll(".video-preview")) preview.hidden = false;
-  const preview = card.querySelector(".video-preview");
-  if (!preview) return;
-  const player = el("iframe", {
-    className: "video-player",
-    src: `https://${standard ? "www.youtube.com" : "www.youtube-nocookie.com"}/embed/${id}?autoplay=1&rel=0`,
-    title: "YouTube video player",
-    allow: "autoplay; encrypted-media; picture-in-picture; fullscreen",
-    allowFullscreen: true,
-    referrerPolicy: "strict-origin-when-cross-origin",
-  });
-  preview.hidden = true;
-  const retry = el("button", {
-    type: "button", textContent: standard ? "Try privacy player" : "Try standard player",
-  });
-  retry.addEventListener("click", () => playVideo(card, !standard));
-  const controls = el("div", { className: "video-controls" }, retry,
-    el("p", { className: "meta", textContent: "Playback error? Try the other player. Videos with embedding or account restrictions may require YouTube." }));
-  preview.after(player, controls);
-}
-
 function render(posts) {
   for (const [source, feed] of Object.entries($feeds)) {
     pendingScroll[source] ??= feed.scrollTop;
@@ -233,13 +178,14 @@ function render(posts) {
           decoding: "async",
           referrerPolicy: "no-referrer",
         });
-        preview = p.source === "youtube"
-          ? el("button", { className: "preview video-preview", type: "button", ariaLabel: `Play: ${p.title}` }, image)
-          : el("a", { className: "preview", href: p.url, ariaLabel: `View image: ${p.title}` }, image);
+        preview = el("a", {
+          className: p.source === "youtube" ? "preview video-preview" : "preview",
+          href: p.url,
+          ariaLabel: p.source === "youtube" ? `Watch on YouTube: ${p.title}` : `View image: ${p.title}`,
+        }, image);
         image.addEventListener("load", () => restoreScroll(source), { once: true });
         image.addEventListener("error", () => {
-          if (source === "youtube") image.remove();
-          else preview.remove();
+          preview.remove();
           restoreScroll(source);
         }, { once: true });
       }
@@ -261,10 +207,6 @@ function render(posts) {
           p.source === "youtube" ? (p.published ? ` · ${p.published}` : "") : ` · ${timeAgo(p.created)}`
         )
       );
-      if (p.source === "youtube") {
-        card.dataset.videoId = p.videoId;
-        if (p.image) preview.addEventListener("click", () => playVideo(card));
-      }
       card.dataset.postId = p.id;
       card.dataset.url = p.url;
       card.dataset.commentsUrl = p.commentsUrl;

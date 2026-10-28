@@ -105,10 +105,9 @@ button:disabled { opacity: 0.5; cursor: default; }
 .feed-column[data-source="youtube"] { --selection: #e53935; }
 #youtube-heading, li.youtube .src { color: #e53935; }
 
-.video-preview { position: relative; padding: 0; border: 0; min-height: 80px; }
-.video-preview[hidden] { display: none; }
+.video-preview { position: relative; }
 .video-preview::after {
-  content: "▶ Play";
+  content: "▶ YouTube ↗";
   position: absolute;
   inset: auto 12px 12px auto;
   padding: 4px 10px;
@@ -116,7 +115,6 @@ button:disabled { opacity: 0.5; cursor: default; }
   background: #111d;
   color: white;
 }
-.video-player { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; margin-bottom: 12px; }
 @media (max-width: 900px) {
   #feeds { grid-template-columns: repeat(3, minmax(280px, 1fr)); }
 }
