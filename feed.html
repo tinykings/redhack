@@ -15,7 +15,7 @@
     <span id="status"></span>
     <button id="refresh" type="button">Refresh</button>
   </header>
-  <p id="keyboard-help">Hover a column: j/k navigate · Enter opens post · c opens comments (new tabs)</p>
+  <p id="keyboard-help">Hover a column: j/k navigate · Enter opens post / plays video · c opens comments (new tabs). Player focused? Click outside for j/k.</p>
   <div id="notice" hidden></div>
   <main id="feeds" aria-describedby="keyboard-help">
     <section class="feed-column" data-source="reddit" aria-labelledby="reddit-heading">
@@ -40,6 +40,10 @@
     <section class="feed-column" data-source="hn" aria-labelledby="hn-heading">
       <h2 id="hn-heading">Hacker News</h2>
       <ol id="hn-feed" class="post-list" aria-labelledby="hn-heading" tabindex="0"></ol>
+    </section>
+    <section class="feed-column" data-source="youtube" aria-labelledby="youtube-heading">
+      <h2 id="youtube-heading">YouTube</h2>
+      <ol id="youtube-feed" class="post-list" aria-labelledby="youtube-heading" tabindex="0"></ol>
     </section>
   </main>
   <script type="module" src="feed.js"></script>

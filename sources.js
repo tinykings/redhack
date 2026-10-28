@@ -1,4 +1,4 @@
-// Fetching and normalizing posts from Reddit and Hacker News.
+// Fetching and normalizing posts from Reddit, Hacker News, and YouTube.
 // Every post is normalized to:
 //   { source, id, title, url, commentsUrl, score, comments, created, label, image? }
 // markSeen() adds `seen: true|false`.
@@ -13,6 +13,7 @@ export const CONFIG = {
 
 const REDDIT = "https://www.reddit.com";
 const HN = "https://hacker-news.firebaseio.com/v0";
+const YOUTUBE = "https://www.youtube.com";
 
 export class NotLoggedInError extends Error {}
 
@@ -138,6 +139,77 @@ export async function fetchHackerNews(limit) {
         label: "Hacker News",
       };
     });
+}
+
+// YouTube exposes subscriptions in page data, not a supported public session API.
+// Parse JSON only: never execute scripts from the fetched page.
+export function parseYouTubeSubscriptions(html, limit = CONFIG.totalItems) {
+  if (/"LOGGED_IN"\s*:\s*false/.test(html)) throw new NotLoggedInError("YouTube session is logged out");
+  const assignment = /(?:var\s+ytInitialData|window\["ytInitialData"\]|ytInitialData)\s*=\s*/g;
+  let data;
+  for (const match of html.matchAll(assignment)) {
+    const start = match.index + match[0].length;
+    if (html[start] !== "{") continue;
+    let depth = 0, quoted = false, escaped = false;
+    for (let i = start; i < html.length; i++) {
+      const c = html[i];
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (c === "\\") escaped = true;
+        else if (c === '"') quoted = false;
+      } else if (c === '"') quoted = true;
+      else if (c === "{") depth++;
+      else if (c === "}" && --depth === 0) {
+        try { data = JSON.parse(html.slice(start, i + 1)); } catch { /* Try next assignment. */ }
+        break;
+      }
+    }
+    if (data) break;
+  }
+  if (!data) throw new Error("YouTube page data unavailable. Open YouTube, finish any consent prompts, then refresh.");
+  if (data.responseContext?.mainAppWebResponseContext?.loggedOut) {
+    throw new NotLoggedInError("YouTube session is logged out");
+  }
+  const text = (value) => value?.simpleText ?? value?.runs?.map((r) => r.text).join("") ?? value?.content ?? "";
+  const posts = [], ids = new Set();
+  function visit(node) {
+    if (!node || typeof node !== "object" || posts.length >= limit) return;
+    const video = node.videoRenderer ?? node.gridVideoRenderer;
+    const lockup = node.lockupViewModel;
+    const id = video?.videoId ?? (lockup?.contentType === "LOCKUP_CONTENT_TYPE_VIDEO" ? lockup.contentId : null);
+    if (typeof id === "string" && /^[\w-]{11}$/.test(id) && !ids.has(id)) {
+      const metadata = lockup?.metadata?.lockupMetadataViewModel;
+      const title = text(video?.title ?? metadata?.title);
+      if (title) {
+        ids.add(id);
+        const url = `${YOUTUBE}/watch?v=${id}`;
+        posts.push({
+          source: "youtube", id: `yt_${id}`, videoId: id, title, url, commentsUrl: url,
+          label: text(video?.ownerText ?? video?.shortBylineText ?? video?.longBylineText)
+            || text(metadata?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]?.text)
+            || "YouTube",
+          published: text(video?.publishedTimeText),
+          image: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        });
+      }
+    }
+    for (const value of Object.values(node)) visit(value);
+  }
+  const tabs = data.contents?.twoColumnBrowseResultsRenderer?.tabs;
+  const selected = tabs?.find((tab) => tab.tabRenderer?.selected)?.tabRenderer;
+  if (!data.contents) throw new Error("YouTube subscriptions unavailable. Check login and consent on YouTube.");
+  visit(selected?.content ?? data.contents);
+  return posts;
+}
+
+export async function fetchYouTube(limit) {
+  const response = await fetch(`${YOUTUBE}/feed/subscriptions`, { credentials: "include" });
+  if (response.status === 401 || response.status === 403) throw new NotLoggedInError("YouTube login required");
+  if (!response.ok) throw new Error(`YouTube HTTP ${response.status}`);
+  if (response.url && new URL(response.url).hostname !== "www.youtube.com") {
+    throw new Error("Open YouTube and finish login or consent, then refresh.");
+  }
+  return parseYouTubeSubscriptions(await response.text(), limit);
 }
 
 // Alternates reddit, hn, reddit, hn... If one source runs short, the other fills the rest.

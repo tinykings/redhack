@@ -30,7 +30,7 @@
 
 body {
   margin: 0 auto;
-  max-width: 1428px;
+  max-width: 2000px;
   height: 100vh;
   height: 100dvh;
   padding: 0 16px;
@@ -86,7 +86,8 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 #feeds {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow-x: auto;
   gap: 0;
   flex: 1;
   min-height: 0;
@@ -101,6 +102,24 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .feed-column[data-source="reddit"] { --selection: var(--reddit-selection); }
 .feed-column[data-source="hn"] { --selection: var(--hn); }
+.feed-column[data-source="youtube"] { --selection: #e53935; }
+#youtube-heading, li.youtube .src { color: #e53935; }
+
+.video-preview { position: relative; padding: 0; border: 0; min-height: 80px; }
+.video-preview[hidden] { display: none; }
+.video-preview::after {
+  content: "▶ Play";
+  position: absolute;
+  inset: auto 12px 12px auto;
+  padding: 4px 10px;
+  border-radius: 5px;
+  background: #111d;
+  color: white;
+}
+.video-player { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; margin-bottom: 12px; }
+@media (max-width: 900px) {
+  #feeds { grid-template-columns: repeat(3, minmax(280px, 1fr)); }
+}
 
 .feed-column + .feed-column { border-left: 1px solid var(--line); }
 

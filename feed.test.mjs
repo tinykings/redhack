@@ -39,7 +39,7 @@ function setup(savedView = null, savedOptions = null) {
     };
     return feed;
   }
-  const feeds = { reddit: makeFeed("reddit"), hn: makeFeed("hn") };
+  const feeds = { reddit: makeFeed("reddit"), hn: makeFeed("hn"), youtube: makeFeed("youtube") };
   const columns = Object.keys(feeds).map((source) => ({
     dataset: { source },
     handlers: {},
@@ -74,9 +74,12 @@ function setup(savedView = null, savedOptions = null) {
     document: {
       createElement(tag) {
         const node = {
-          tagName: tag, dataset: {}, children: [],
+          tagName: tag, dataset: {}, children: [], isConnected: true, handlers: {},
           append(...children) { this.children.push(...children); },
-          addEventListener() {},
+          addEventListener(type, handler) { this.handlers[type] = handler; },
+          querySelector(selector) { return this.children.find((child) => typeof child === "object" && child.className?.split(" ").includes(selector.slice(1))); },
+          after(node) { this.afterNode = node; },
+          remove() { this.removed = true; },
         };
         node.classList = {
           contains: (name) => node.className?.split(" ").includes(name) ?? false,
@@ -87,12 +90,16 @@ function setup(savedView = null, savedOptions = null) {
         };
         return node;
       },
-      getElementById: (id) => controls[id] ?? feeds[id.replace(/-feed$/, "")] ?? { addEventListener() {} },
-      querySelectorAll: () => columns,
+      getElementById: (id) => controls[id] ?? feeds[id.replace(/-feed$/, "")] ?? { addEventListener() {}, replaceChildren() {} },
+      querySelectorAll: (selector) => selector === ".feed-column" ? columns : Object.values(feeds).flatMap((feed) => feed.children.flatMap((card) => card.children ?? [])).filter((node) => node?.className?.split(" ").includes(selector.slice(1))),
       addEventListener(type, handler) { keyHandler = handler; },
     },
     // Leave initial loading pending; these tests exercise navigation only.
-    chrome: { storage: { local: { get: () => new Promise(() => {}) } } },
+    chrome: {
+      storage: { local: { get: () => new Promise(() => {}) } },
+      runtime: { getURL: () => "chrome-extension://test-extension/" },
+      declarativeNetRequest: { async updateSessionRules(rules) { context.embedRules = rules; } },
+    },
   });
   vm.runInContext(readFileSync(new URL("./feed.js", import.meta.url), "utf8").replace(/^import .*\n/, ""), context);
   function press(key, extra = {}) {
@@ -160,10 +167,10 @@ test("j/k skip seen posts and dividers, including all-seen feeds", () => {
 
 test("render groups seen posts below a labeled divider in each column", () => {
   const app = setup(JSON.stringify({ reddit: { postId: "reddit-seen" } }));
-  app.context.posts = ["reddit", "hn"].flatMap((source) => [true, false].map((seen) => ({
+  app.context.posts = ["reddit", "hn", "youtube"].flatMap((source) => [true, false].map((seen) => ({
     source, seen, id: `${source}-${seen ? "seen" : "new"}`,
     url: "https://example.com/post", commentsUrl: "https://example.com/comments",
-    title: "Post", label: source, score: 1, comments: 1, created: 0,
+    title: "Post", label: source, score: 1, comments: 1, created: 0, videoId: "abcdefghijk",
   })));
   vm.runInContext("render(posts)", app.context);
   for (const [source, feed] of Object.entries(app.feeds)) {
@@ -264,6 +271,47 @@ test("Reddit controls default to Best, persist Top timeframe, and reset only Red
   sort.value = "new";
   sort.handlers.change();
   assert.equal(timeframe.hidden, true);
+});
+
+test("YouTube preview and Enter play inline; c keeps external comments link", async () => {
+  const app = setup();
+  app.context.posts = [{
+    source: "youtube", id: "yt_abcdefghijk", videoId: "abcdefghijk", title: "Video",
+    label: "Creator", published: "1 hour ago", image: "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg",
+    url: "https://www.youtube.com/watch?v=abcdefghijk", commentsUrl: "https://www.youtube.com/watch?v=abcdefghijk",
+  }];
+  vm.runInContext("render(posts)", app.context);
+  const card = app.feeds.youtube.children[0];
+  const preview = card.querySelector(".video-preview");
+  assert.equal(preview.tagName, "button");
+  await preview.handlers.click();
+  // Event handler need not return playback promise; allow its continuation to run.
+  await Promise.resolve();
+  assert.equal(preview.hidden, true);
+  assert.equal(preview.afterNode.tagName, "iframe");
+  assert.equal(preview.afterNode.src, "https://www.youtube.com/embed/abcdefghijk?autoplay=1&rel=0");
+  const condition = app.context.embedRules.addRules[0].condition;
+  assert.equal(condition.initiatorDomains[0], "test-extension");
+  assert.equal(condition.resourceTypes[0], "sub_frame");
+  app.columns[2].handlers.pointerenter();
+  // Render mocks do not implement scrolling/focus. Test Enter using saved selection.
+  vm.runInContext('currentPostIds.youtube = "yt_abcdefghijk"', app.context);
+  assert.equal(app.press("Enter").prevented, true);
+  await Promise.resolve();
+  assert.equal(app.opened.length, 0);
+  app.press("c");
+  assert.equal(app.opened[0][0], app.context.posts[0].commentsUrl);
+});
+
+test("YouTube column uses independent j/k navigation", () => {
+  const app = setup();
+  app.columns[2].handlers.pointerenter();
+  app.press("j"); app.press("j");
+  assert.equal(app.feeds.youtube.children[1].selected, true);
+  assert.equal(app.feeds.reddit.lastScroll, undefined);
+  assert.equal(app.feeds.hn.lastScroll, undefined);
+  app.press("k");
+  assert.equal(app.feeds.youtube.children[0].selected, true);
 });
 
 test("invalid saved state falls back safely", () => {

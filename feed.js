@@ -1,12 +1,13 @@
-import { CONFIG, NotLoggedInError, fetchReddit, fetchHackerNews, interleave, markSeen } from "./sources.js";
+import { CONFIG, NotLoggedInError, fetchReddit, fetchHackerNews, fetchYouTube, interleave, markSeen } from "./sources.js";
 
-const CACHE_KEY = "feedCache";
+const CACHE_KEY = "feedCacheV2";
 const SEEN_KEY = "seenPosts";
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
 const $feeds = {
   reddit: document.getElementById("reddit-feed"),
   hn: document.getElementById("hn-feed"),
+  youtube: document.getElementById("youtube-feed"),
 };
 const $status = document.getElementById("status");
 const $notice = document.getElementById("notice");
@@ -119,7 +120,8 @@ function navigatePosts(event) {
     if (current < 0 || event.repeat) return;
     event.preventDefault();
     const card = cards[current];
-    window.open(event.key === "c" ? card.dataset.commentsUrl : card.dataset.url, "_blank", "noopener,noreferrer");
+    if (source === "youtube" && event.key === "Enter") playVideo(card);
+    else window.open(event.key === "c" ? card.dataset.commentsUrl : card.dataset.url, "_blank", "noopener,noreferrer");
     return;
   }
   event.preventDefault();
@@ -156,6 +158,53 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
+let embedSetup;
+async function playVideo(card) {
+  const id = card.dataset.videoId;
+  if (!/^[\w-]{11}$/.test(id ?? "")) return;
+  // YouTube rejects extension-origin embeds without an HTTP(S) Referer (error 153).
+  // Scope this header to embeds initiated by this extension, not ordinary browsing.
+  try {
+    embedSetup ??= chrome.declarativeNetRequest.updateSessionRules({
+      removeRuleIds: [1],
+      addRules: [{
+        id: 1, priority: 1,
+        action: { type: "modifyHeaders", requestHeaders: [
+          { header: "Referer", operation: "set", value: "https://www.youtube.com/" },
+        ] },
+        condition: {
+          urlFilter: "|https://www.youtube.com/embed/",
+          resourceTypes: ["sub_frame"],
+          initiatorDomains: [new URL(chrome.runtime.getURL("/")).hostname],
+        },
+      }],
+    });
+    await embedSetup;
+  } catch (error) {
+    embedSetup = null;
+    showNotice(`Couldn't set up YouTube playback: ${error.message}. Use Open on YouTube instead.`);
+    return;
+  }
+  if (!card.isConnected) return;
+  // One active player; replacing/removing an iframe stops its audio.
+  for (const player of document.querySelectorAll(".video-player")) {
+    player.remove();
+  }
+  for (const preview of document.querySelectorAll(".video-preview")) preview.hidden = false;
+  const preview = card.querySelector(".video-preview");
+  if (!preview) return;
+  const player = el("iframe", {
+    className: "video-player",
+    src: `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`,
+    title: "YouTube video player",
+    allow: "autoplay; encrypted-media; picture-in-picture; fullscreen",
+    allowFullscreen: true,
+    referrerPolicy: "strict-origin-when-cross-origin",
+  });
+  preview.hidden = true;
+  preview.after(player);
+}
+
 function render(posts) {
   for (const [source, feed] of Object.entries($feeds)) {
     pendingScroll[source] ??= feed.scrollTop;
@@ -177,14 +226,13 @@ function render(posts) {
           decoding: "async",
           referrerPolicy: "no-referrer",
         });
-        preview = el("a", {
-          className: "preview",
-          href: p.url,
-          "ariaLabel": `View image: ${p.title}`,
-        }, image);
+        preview = p.source === "youtube"
+          ? el("button", { className: "preview video-preview", type: "button", ariaLabel: `Play: ${p.title}` }, image)
+          : el("a", { className: "preview", href: p.url, ariaLabel: `View image: ${p.title}` }, image);
         image.addEventListener("load", () => restoreScroll(source), { once: true });
         image.addEventListener("error", () => {
-          preview.remove();
+          if (source === "youtube") image.remove();
+          else preview.remove();
           restoreScroll(source);
         }, { once: true });
       }
@@ -201,11 +249,15 @@ function render(posts) {
           "div",
           { className: "meta" },
           el("span", { className: "src", textContent: p.label }),
-          ` · ${compact(p.score)} points · `,
-          el("a", { href: p.commentsUrl, textContent: `${compact(p.comments)} comments` }),
-          ` · ${timeAgo(p.created)}`
+          p.source === "youtube" ? " · " : ` · ${compact(p.score)} points · `,
+          el("a", { href: p.commentsUrl, textContent: p.source === "youtube" ? "Open on YouTube / comments" : `${compact(p.comments)} comments` }),
+          p.source === "youtube" ? (p.published ? ` · ${p.published}` : "") : ` · ${timeAgo(p.created)}`
         )
       );
+      if (p.source === "youtube") {
+        card.dataset.videoId = p.videoId;
+        if (p.image) preview.addEventListener("click", () => playVideo(card));
+      }
       card.dataset.postId = p.id;
       card.dataset.url = p.url;
       card.dataset.commentsUrl = p.commentsUrl;
@@ -231,6 +283,7 @@ async function load({ force = false } = {}) {
   const options = { ...redditOptions };
   const redditCacheKey = options.sort === "top" ? `top:${options.timeframe}` : options.sort;
   $notice.hidden = true;
+  $notice.replaceChildren();
   const { [CACHE_KEY]: storedCache } = await chrome.storage.local.get(CACHE_KEY);
   if (version !== loadVersion) return;
   const cache = storedCache?.redditCacheKey === redditCacheKey ? storedCache : null;
@@ -245,9 +298,10 @@ async function load({ force = false } = {}) {
   $status.textContent = "Loading…";
 
   // Ask each source for the full total so either can fill in if the other comes up short.
-  const [reddit, hn] = await Promise.allSettled([
+  const [reddit, hn, youtube] = await Promise.allSettled([
     fetchReddit(CONFIG.totalItems, options),
     fetchHackerNews(CONFIG.totalItems),
+    fetchYouTube(CONFIG.totalItems),
   ]);
 
   if (version !== loadVersion) return;
@@ -264,27 +318,47 @@ async function load({ force = false } = {}) {
       showNotice(`Reddit failed: ${reddit.reason.message}`);
     }
   }
-  if (hn.status === "rejected") console.error("Hacker News fetch failed:", hn.reason);
+  if (hn.status === "rejected") {
+    console.error("Hacker News fetch failed:", hn.reason);
+    $notice.append(el("p", { textContent: `Hacker News failed: ${hn.reason.message}` }));
+    $notice.hidden = false;
+  }
+  if (youtube.status === "rejected") {
+    console.error("YouTube fetch failed:", youtube.reason);
+    $notice.append(el("p", {},
+      youtube.reason instanceof NotLoggedInError ? "Couldn't read your YouTube subscriptions. " : `YouTube failed: ${youtube.reason.message}. `,
+      el("a", { href: "https://www.youtube.com/feed/subscriptions", textContent: "Open YouTube" }),
+      " in this browser, check login and consent, then refresh. Browser cookie restrictions may prevent session access."
+    ));
+    $notice.hidden = false;
+  }
 
   const { [SEEN_KEY]: storedSeen } = await chrome.storage.local.get(SEEN_KEY);
   if (version !== loadVersion) return;
-  const { posts, seen } = markSeen(interleave(
-    reddit.status === "fulfilled" ? reddit.value : [],
-    hn.status === "fulfilled" ? hn.value : [],
-    CONFIG.totalItems
-  ), storedSeen);
+  const fresh = [
+    ...interleave(
+      reddit.status === "fulfilled" ? reddit.value : [],
+      hn.status === "fulfilled" ? hn.value : [],
+      CONFIG.totalItems
+    ),
+    ...(youtube.status === "fulfilled" ? youtube.value : []),
+  ];
+  const marked = markSeen(fresh, storedSeen);
+  const seen = marked.seen;
+  const results = { reddit, hn, youtube };
+  const posts = [...marked.posts, ...(cache?.posts ?? []).filter((p) => results[p.source]?.status === "rejected")];
   await chrome.storage.local.set({ [SEEN_KEY]: seen });
 
-  // Only replace a good cache when both sources came back.
-  if (reddit.status === "fulfilled" && hn.status === "fulfilled") {
+  // Partial failures retain cached cards, but must not cache a failed request as fresh.
+  if (Object.values(results).every((result) => result.status === "fulfilled")) {
     await chrome.storage.local.set({ [CACHE_KEY]: { fetchedAt: Date.now(), redditCacheKey, posts } });
   }
   if (version !== loadVersion) return;
   if (posts.length || !cache) render(posts);
 
-  const counts = { reddit: 0, hn: 0 };
+  const counts = { reddit: 0, hn: 0, youtube: 0 };
   for (const p of posts) counts[p.source]++;
-  $status.textContent = `${counts.reddit} Reddit · ${counts.hn} HN · just now`;
+  $status.textContent = `${counts.reddit} Reddit · ${counts.hn} HN · ${counts.youtube} YouTube · just now`;
   $refresh.disabled = false;
 }
 

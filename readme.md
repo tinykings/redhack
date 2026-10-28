@@ -1,14 +1,17 @@
 # RedHack Feed
 
-Browser extension combining top posts from your subscribed subreddits with Hacker News in one feed. Plain JavaScript, HTML, and CSS; no build step or dependencies.
+Browser extension combining Reddit, Hacker News, and your YouTube subscriptions in three columns. Plain JavaScript, HTML, and CSS; no build step or dependencies.
 
 ## Features
 
-- Alternates Reddit and Hacker News posts, up to 100 items by default.
+- Reddit and Hacker News share up to 100 items by default; YouTube adds up to 100 videos from the initial subscriptions page (no older-page pagination yet).
+- YouTube uses your existing browser login—no API key or OAuth setup.
+- Click a video thumbnail or press **Enter** on a selected video to play inline. Only one player runs at a time; blocked embeds have an **Open on YouTube / comments** fallback.
+- Hover a column and use **j/k** to navigate new items; **c** opens comments in a new tab. Click outside the embedded player to return keyboard control to the feed.
 - Removes duplicate URLs and fills remaining slots when one source runs short.
 - Reddit sort picker: **Best** (default, personalized home ranking), **Top** with timeframe, or **New**. Choice persists across reloads.
 - Caps Reddit posts at five per subreddit; excludes pinned and NSFW posts.
-- Remembers posts shown by earlier refreshes; when they appear again they move to the bottom of their column and are faded.
+- Remembers posts/videos shown by earlier refreshes; repeats move below a **Seen** divider. Seen means previously fetched, not necessarily watched; this does not sync YouTube watch history.
 - Shows scores, comment links, post ages, and available Reddit image previews.
 - Follows your system’s light or dark theme.
 - Caches results locally for 15 minutes. **Refresh** bypasses the cache.
@@ -42,11 +45,14 @@ Firefox temporary installations last until the browser restarts.
 1. Log in to [Reddit](https://www.reddit.com/login) in the same browser profile and subscribe to at least one subreddit.
 2. Click the **RedHack Feed** toolbar button.
 3. Choose **Best**, **Top**, or **New** beside the Reddit heading. **Top** offers past hour/day/week/month/year or all time.
-4. Click **Refresh** to fetch fresh posts.
+4. Log in to [YouTube](https://www.youtube.com/feed/subscriptions) in the same browser profile and complete any consent prompts.
+5. Click **Refresh** to fetch fresh posts and videos. After installing this update, reload the extension and feed tab; approve new permissions if prompted.
 
 No Reddit API keys or Hacker News account required. Reddit requests use your existing browser session. If subscriptions cannot be read, the feed shows a login notice and can still display Hacker News posts.
 
-If a source fails, available posts from the other source are shown. An existing cache is replaced only when both source requests succeed.
+If a source fails, other sources still load and cached cards from the failed source remain available. An existing cache is replaced only when all three requests succeed.
+
+YouTube session access relies on undocumented page data and may break when YouTube changes its layout. Browser cookie restrictions can prevent login detection even when the site works in a normal tab. Some videos forbid embedded playback; use the external watch link instead.
 
 ## Configuration
 
@@ -83,12 +89,14 @@ Tests mock network requests and cover Reddit previews, galleries, crossposts, di
 | `feed.html`, `feed.css` | Feed markup and styling |
 | `feed.js` | Rendering, refresh, cache, and error notices |
 | `sources.js` | API requests, post normalization, image selection, and interleaving |
-| `sources.test.mjs` | Reddit image extraction tests |
+| `sources.test.mjs`, `youtube.test.mjs`, `feed.test.mjs` | Source parsing, session errors, seen history, rendering, playback, and keyboard tests |
 
 ## Permissions and data
 
-- `storage`: saves the feed cache and previously shown post ids in local extension storage.
+- `storage`: saves the feed cache and previously shown post/video ids in local extension storage.
+- `declarativeNetRequestWithHostAccess`: supplies an HTTP Referer only for YouTube embed frames initiated by this extension, which YouTube requires for playback. Does not modify normal YouTube browsing.
+- `https://www.youtube.com/*`: reads your subscriptions page with browser session credentials and hosts embedded players.
 - `https://www.reddit.com/*`: reads subscriptions and top posts.
 - `https://hacker-news.firebaseio.com/*`: reads Hacker News top stories and story details.
 
-Requests go directly to Reddit and Hacker News; no project backend. Image previews load from their source hosts. Cached posts remain in the browser’s extension storage.
+Requests go directly to Reddit, Hacker News, and YouTube; no project backend. YouTube thumbnails load from `i.ytimg.com`; embedded playback connects directly to YouTube and may use its cookies. Image previews load from their source hosts. Cached posts remain in the browser’s extension storage.
