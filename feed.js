@@ -1,6 +1,6 @@
 import { CONFIG, NotLoggedInError, fetchReddit, fetchHackerNews, fetchYouTube, interleave, markSeen } from "./sources.js";
 
-const CACHE_KEY = "feedCacheV2";
+const CACHE_KEY = "feedCacheV3";
 const SEEN_KEY = "seenPosts";
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
@@ -159,25 +159,25 @@ function el(tag, props = {}, ...children) {
 }
 
 let embedSetup;
-async function playVideo(card) {
+async function playVideo(card, standard = false) {
   const id = card.dataset.videoId;
   if (!/^[\w-]{11}$/.test(id ?? "")) return;
   // YouTube rejects extension-origin embeds without an HTTP(S) Referer (error 153).
   // Scope this header to embeds initiated by this extension, not ordinary browsing.
   try {
     embedSetup ??= chrome.declarativeNetRequest.updateSessionRules({
-      removeRuleIds: [1],
-      addRules: [{
-        id: 1, priority: 1,
+      removeRuleIds: [1, 2],
+      addRules: ["www.youtube.com", "www.youtube-nocookie.com"].map((host, index) => ({
+        id: index + 1, priority: 1,
         action: { type: "modifyHeaders", requestHeaders: [
           { header: "Referer", operation: "set", value: "https://www.youtube.com/" },
         ] },
         condition: {
-          urlFilter: "|https://www.youtube.com/embed/",
+          urlFilter: `|https://${host}/embed/`,
           resourceTypes: ["sub_frame"],
           initiatorDomains: [new URL(chrome.runtime.getURL("/")).hostname],
         },
-      }],
+      })),
     });
     await embedSetup;
   } catch (error) {
@@ -190,19 +190,26 @@ async function playVideo(card) {
   for (const player of document.querySelectorAll(".video-player")) {
     player.remove();
   }
+  for (const controls of document.querySelectorAll(".video-controls")) controls.remove();
   for (const preview of document.querySelectorAll(".video-preview")) preview.hidden = false;
   const preview = card.querySelector(".video-preview");
   if (!preview) return;
   const player = el("iframe", {
     className: "video-player",
-    src: `https://www.youtube.com/embed/${id}?autoplay=1&rel=0`,
+    src: `https://${standard ? "www.youtube.com" : "www.youtube-nocookie.com"}/embed/${id}?autoplay=1&rel=0`,
     title: "YouTube video player",
     allow: "autoplay; encrypted-media; picture-in-picture; fullscreen",
     allowFullscreen: true,
     referrerPolicy: "strict-origin-when-cross-origin",
   });
   preview.hidden = true;
-  preview.after(player);
+  const retry = el("button", {
+    type: "button", textContent: standard ? "Try privacy player" : "Try standard player",
+  });
+  retry.addEventListener("click", () => playVideo(card, !standard));
+  const controls = el("div", { className: "video-controls" }, retry,
+    el("p", { className: "meta", textContent: "Playback error? Try the other player. Videos with embedding or account restrictions may require YouTube." }));
+  preview.after(player, controls);
 }
 
 function render(posts) {

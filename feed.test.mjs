@@ -78,7 +78,7 @@ function setup(savedView = null, savedOptions = null) {
           append(...children) { this.children.push(...children); },
           addEventListener(type, handler) { this.handlers[type] = handler; },
           querySelector(selector) { return this.children.find((child) => typeof child === "object" && child.className?.split(" ").includes(selector.slice(1))); },
-          after(node) { this.afterNode = node; },
+          after(...nodes) { this.afterNode = nodes[0]; this.afterNodes = nodes; },
           remove() { this.removed = true; },
         };
         node.classList = {
@@ -289,7 +289,15 @@ test("YouTube preview and Enter play inline; c keeps external comments link", as
   await Promise.resolve();
   assert.equal(preview.hidden, true);
   assert.equal(preview.afterNode.tagName, "iframe");
+  assert.equal(preview.afterNode.src, "https://www.youtube-nocookie.com/embed/abcdefghijk?autoplay=1&rel=0");
+  assert.equal(app.context.embedRules.addRules[1].condition.urlFilter, "|https://www.youtube-nocookie.com/embed/");
+  assert.equal(app.context.embedRules.addRules[1].action.requestHeaders[0].header, "Referer");
+  const retry = preview.afterNodes[1].children[0];
+  assert.equal(retry.textContent, "Try standard player");
+  await retry.handlers.click();
+  await Promise.resolve();
   assert.equal(preview.afterNode.src, "https://www.youtube.com/embed/abcdefghijk?autoplay=1&rel=0");
+  assert.equal(preview.afterNodes[1].children[0].textContent, "Try privacy player");
   const condition = app.context.embedRules.addRules[0].condition;
   assert.equal(condition.initiatorDomains[0], "test-extension");
   assert.equal(condition.resourceTypes[0], "sub_frame");

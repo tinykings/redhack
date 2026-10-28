@@ -5,8 +5,8 @@ Browser extension combining Reddit, Hacker News, and your YouTube subscriptions 
 ## Features
 
 - Reddit and Hacker News share up to 100 items by default; YouTube adds up to 100 videos from the initial subscriptions page (no older-page pagination yet).
-- YouTube uses your existing browser login—no API key or OAuth setup.
-- Click a video thumbnail or press **Enter** on a selected video to play inline. Only one player runs at a time; blocked embeds have an **Open on YouTube / comments** fallback.
+- YouTube uses your existing browser login—no API key or OAuth setup. Ranked “Most relevant” carousels and supplemental rich shelves are excluded; main upload-list order is preserved.
+- Click a video thumbnail or press **Enter** on a selected video to play inline. Privacy-enhanced player is the default; **Try standard player** switches embed hosts for compatibility. Only one player runs at a time. Neither player can override owner-disabled embedding, age/account checks, or regional restrictions; use **Open on YouTube / comments** for those videos.
 - Hover a column and use **j/k** to navigate new items; **c** opens comments in a new tab. Click outside the embedded player to return keyboard control to the feed.
 - Removes duplicate URLs and fills remaining slots when one source runs short.
 - Reddit sort picker: **Best** (default, personalized home ranking), **Top** with timeframe, or **New**. Choice persists across reloads.
@@ -95,7 +95,8 @@ Tests mock network requests and cover Reddit previews, galleries, crossposts, di
 
 - `storage`: saves the feed cache and previously shown post/video ids in local extension storage.
 - `declarativeNetRequestWithHostAccess`: supplies an HTTP Referer only for YouTube embed frames initiated by this extension, which YouTube requires for playback. Does not modify normal YouTube browsing.
-- `https://www.youtube.com/*`: reads your subscriptions page with browser session credentials and hosts embedded players.
+- `https://www.youtube.com/*`: reads your subscriptions page with browser session credentials and hosts standard embedded players.
+- `https://www.youtube-nocookie.com/*`: hosts privacy-enhanced embedded players, with the same extension-scoped Referer rule.
 - `https://www.reddit.com/*`: reads subscriptions and top posts.
 - `https://hacker-news.firebaseio.com/*`: reads Hacker News top stories and story details.
 

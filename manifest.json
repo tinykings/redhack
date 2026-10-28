@@ -26,10 +26,11 @@
   "host_permissions": [
     "https://www.reddit.com/*",
     "https://hacker-news.firebaseio.com/*",
-    "https://www.youtube.com/*"
+    "https://www.youtube.com/*",
+    "https://www.youtube-nocookie.com/*"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https://www.youtube.com;"
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-src https://www.youtube.com https://www.youtube-nocookie.com;"
   },
   "browser_specific_settings": {
     "gecko": {

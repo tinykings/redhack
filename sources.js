@@ -174,6 +174,15 @@ export function parseYouTubeSubscriptions(html, limit = CONFIG.totalItems) {
   const posts = [], ids = new Set();
   function visit(node) {
     if (!node || typeof node !== "object" || posts.length >= limit) return;
+    // Ranked carousels ("Most relevant"), Shorts, and other rich shelves are
+    // supplemental sections, not the chronological subscription upload list.
+    if (node.richSectionRenderer || node.richShelfRenderer || node.reelShelfRenderer
+      || node.horizontalListRenderer) return;
+    const section = node.shelfRenderer ?? node.itemSectionRenderer;
+    if (section) {
+      const heading = text(section.title) || text(section.header?.itemSectionHeaderRenderer?.title);
+      if (/most relev[ae]nt|recommended|for you/i.test(heading)) return;
+    }
     const video = node.videoRenderer ?? node.gridVideoRenderer;
     const lockup = node.lockupViewModel;
     const id = video?.videoId ?? (lockup?.contentType === "LOCKUP_CONTENT_TYPE_VIDEO" ? lockup.contentId : null);

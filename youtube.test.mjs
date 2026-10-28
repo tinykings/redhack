@@ -25,6 +25,22 @@ test("YouTube parses subscriptions, escaped titles, deduplication, selected tab,
   assert.equal(markSeen(posts, { youtube: [posts[0].id] }).posts[0].seen, true);
 });
 
+test("YouTube ignores ranked shelves without consuming limits or hiding chronological duplicates", () => {
+  const html = page({ richGridRenderer: { contents: [
+    { richSectionRenderer: { content: { richShelfRenderer: {
+      title: { runs: [{ text: "Most relevant" }] }, contents: [video("ranked00001"), video()],
+    } } } },
+    { shelfRenderer: { title: { simpleText: "Most relevant" }, content: { items: [video("ranked00002")] } } },
+    { itemSectionRenderer: {
+      header: { itemSectionHeaderRenderer: { title: { simpleText: "Most relevant" } } }, contents: [video("ranked00003")],
+    } },
+    { shelfRenderer: { title: { simpleText: "Today" }, content: { items: [video()] } } },
+    { richItemRenderer: { content: video("12345678901") } },
+  ] } });
+  assert.deepEqual(parseYouTubeSubscriptions(html).map((p) => p.videoId), ["abcdefghijk", "12345678901"]);
+  assert.equal(parseYouTubeSubscriptions(html, 1)[0].videoId, "abcdefghijk");
+});
+
 test("YouTube supports current lockup renderers and window assignment", () => {
   const html = page({ items: [{ lockupViewModel: {
     contentId: "abcdefghijk", contentType: "LOCKUP_CONTENT_TYPE_VIDEO",
