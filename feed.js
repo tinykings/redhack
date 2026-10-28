@@ -47,7 +47,7 @@ function updateKeyboardFade(source = null) {
   keyboardSource = source;
   for (const [name, feed] of Object.entries($feeds)) {
     for (const card of feed.children) {
-      card.classList.toggle("keyboard-dimmed", source !== null
+      card.classList.toggle("keyboard-dimmed", Boolean(card.dataset.postId) && source !== null
         && (name !== source || card.dataset.postId !== currentPostIds[source]));
     }
   }
@@ -112,7 +112,7 @@ function navigatePosts(event) {
   if (!activeSource) return;
   const source = activeSource;
   const feed = $feeds[source];
-  const cards = Array.from(feed.children);
+  const cards = Array.from(feed.children).filter((card) => card.dataset.postId && !card.classList.contains("seen"));
   if (!cards.length) return;
   const current = cards.findIndex((card) => card.dataset.postId === currentPostIds[source]);
   if (event.key === "Enter" || event.key === "c") {
@@ -160,8 +160,11 @@ function render(posts) {
     pendingScroll[source] ??= feed.scrollTop;
     const sourcePosts = posts.filter((p) => p.source === source);
     // Posts shown by an earlier refresh drop below the new ones.
-    const ordered = [...sourcePosts.filter((p) => !p.seen), ...sourcePosts.filter((p) => p.seen)];
-    feed.replaceChildren(...ordered.map((p) => {
+    const unseen = sourcePosts.filter((p) => !p.seen);
+    const seen = sourcePosts.filter((p) => p.seen);
+    const ordered = [...unseen, ...seen];
+    if (!unseen.some((p) => p.id === currentPostIds[source])) currentPostIds[source] = null;
+    const cards = ordered.map((p) => {
       const domain = new URL(p.url).hostname.replace(/^www\./, "");
       const isDiscussion = p.url === p.commentsUrl;
       let preview = "";
@@ -206,7 +209,12 @@ function render(posts) {
       card.dataset.url = p.url;
       card.dataset.commentsUrl = p.commentsUrl;
       return card;
-    }));
+    });
+    if (seen.length) {
+      cards.splice(unseen.length, 0, el("li", { className: "seen-divider" },
+        el("hr"), el("span", { textContent: "Seen" }), el("hr")));
+    }
+    feed.replaceChildren(...cards);
     restoreScroll(source);
   }
   updateKeyboardFade(keyboardSource);

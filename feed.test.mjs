@@ -28,6 +28,7 @@ function setup(savedView = null, savedOptions = null) {
           getBoundingClientRect: () => ({ top: 200 - feed.scrollTop }),
         };
         card.classList = {
+          contains(name) { return card.className?.split(" ").includes(name) ?? false; },
           toggle(name, value) {
             if (name === "current") card.selected = value;
             if (name === "keyboard-dimmed") card.dimmed = value;
@@ -59,6 +60,7 @@ function setup(savedView = null, savedOptions = null) {
   const opened = [];
   const context = vm.createContext({
     CONFIG: { redditTimeWindow: "day" },
+    URL,
     localStorage: {
       getItem: (key) => stored.get(key) ?? null,
       setItem: (key, value) => stored.set(key, value),
@@ -70,6 +72,21 @@ function setup(savedView = null, savedOptions = null) {
       open(...args) { opened.push(args); },
     },
     document: {
+      createElement(tag) {
+        const node = {
+          tagName: tag, dataset: {}, children: [],
+          append(...children) { this.children.push(...children); },
+          addEventListener() {},
+        };
+        node.classList = {
+          contains: (name) => node.className?.split(" ").includes(name) ?? false,
+          toggle(name, value) {
+            if (name === "keyboard-dimmed") node.dimmed = value;
+            if (name === "current") node.selected = value;
+          },
+        };
+        return node;
+      },
       getElementById: (id) => controls[id] ?? feeds[id.replace(/-feed$/, "")] ?? { addEventListener() {} },
       querySelectorAll: () => columns,
       addEventListener(type, handler) { keyHandler = handler; },
@@ -112,6 +129,47 @@ test("j/k follow hovered column, preserve independent selection, and scroll only
   assert.equal(feeds.reddit.children[2].selected, true);
   columns[0].handlers.pointerleave();
   assert.equal(press("k").prevented, undefined);
+});
+
+test("j/k skip seen posts and dividers, including all-seen feeds", () => {
+  const { feeds, columns, press } = setup();
+  const [first, seen, last] = feeds.reddit.children;
+  seen.className = "seen";
+  feeds.reddit.children.splice(1, 0, { dataset: {}, classList: { toggle() {} } });
+  columns[0].handlers.pointerenter();
+  press("j");
+  assert.equal(first.selected, true);
+  press("j");
+  assert.equal(last.selected, true);
+  assert.equal(seen.selected, false);
+  press("j");
+  assert.equal(last.selected, true);
+  press("k");
+  assert.equal(first.selected, true);
+  first.className = last.className = "seen";
+  assert.equal(press("j").prevented, undefined);
+});
+
+test("render groups seen posts below a labeled divider in each column", () => {
+  const app = setup(JSON.stringify({ reddit: { postId: "reddit-seen" } }));
+  app.context.posts = ["reddit", "hn"].flatMap((source) => [true, false].map((seen) => ({
+    source, seen, id: `${source}-${seen ? "seen" : "new"}`,
+    url: "https://example.com/post", commentsUrl: "https://example.com/comments",
+    title: "Post", label: source, score: 1, comments: 1, created: 0,
+  })));
+  vm.runInContext("render(posts)", app.context);
+  for (const [source, feed] of Object.entries(app.feeds)) {
+    const [fresh, divider, seen] = feed.children;
+    assert.equal(fresh.dataset.postId, `${source}-new`);
+    assert.equal(divider.className, "seen-divider");
+    assert.deepEqual(divider.children.map((node) => node.tagName), ["hr", "span", "hr"]);
+    assert.equal(divider.children[1].textContent, "Seen");
+    assert.equal(seen.dataset.postId, `${source}-seen`);
+    assert.equal(seen.classList.contains("current"), false);
+  }
+  app.context.posts = app.context.posts.filter((post) => !post.seen);
+  vm.runInContext("render(posts)", app.context);
+  assert.equal(app.feeds.reddit.children.length, 1);
 });
 
 test("navigation ignores typing, modifiers, composition, and empty columns", () => {

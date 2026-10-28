@@ -169,10 +169,24 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .post-list li.hn { background: var(--hn-card-bg); }
 
-/* Already shown by an earlier refresh. */
-.post-list li.seen { opacity: 0.55; }
-.post-list li.seen:hover,
-.post-list li.seen.current { opacity: 1; }
+/* Separate posts shown by an earlier refresh without dimming them. */
+.post-list li.seen-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.seen-divider hr {
+  flex: 1;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--muted);
+}
 
 /* Keyboard focus dims every other card, including the other column's selection. */
 .post-list li.keyboard-dimmed { opacity: 0.25; }
