@@ -20,6 +20,7 @@ test("YouTube parses subscriptions, escaped titles, deduplication, selected tab,
   assert.equal(posts[0].title, 'Video "title" } \\ test');
   assert.equal(posts[0].label, "Channel");
   assert.equal(posts[0].published, "2 hours ago");
+  assert.equal(posts[0].image, "https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg");
   assert.equal(posts[0].url, "https://www.youtube.com/watch?v=abcdefghijk");
   assert.equal(parseYouTubeSubscriptions(html, 1).length, 1);
   assert.equal(markSeen(posts, { youtube: [posts[0].id] }).posts[0].seen, true);

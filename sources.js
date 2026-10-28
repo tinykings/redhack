@@ -198,7 +198,7 @@ export function parseYouTubeSubscriptions(html, limit = CONFIG.totalItems) {
             || text(metadata?.metadata?.contentMetadataViewModel?.metadataRows?.[0]?.metadataParts?.[0]?.text)
             || "YouTube",
           published: text(video?.publishedTimeText),
-          image: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+          image: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`,
         });
       }
     }

@@ -1,6 +1,6 @@
 import { CONFIG, NotLoggedInError, fetchReddit, fetchHackerNews, fetchYouTube, interleave, markSeen } from "./sources.js";
 
-const CACHE_KEY = "feedCacheV3";
+const CACHE_KEY = "feedCacheV4";
 const SEEN_KEY = "seenPosts";
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
@@ -183,11 +183,20 @@ function render(posts) {
           href: p.url,
           ariaLabel: p.source === "youtube" ? `Watch on YouTube: ${p.title}` : `View image: ${p.title}`,
         }, image);
-        image.addEventListener("load", () => restoreScroll(source), { once: true });
-        image.addEventListener("error", () => {
-          preview.remove();
+        const fallbacks = source === "youtube" && /^[\w-]{11}$/.test(p.videoId ?? "")
+          ? ["sddefault", "hqdefault"].map((size) => `https://i.ytimg.com/vi/${p.videoId}/${size}.jpg`)
+          : [];
+        function retryImage() {
+          if (fallbacks.length) image.src = fallbacks.shift();
+          else preview.remove();
           restoreScroll(source);
-        }, { once: true });
+        }
+        image.addEventListener("load", () => {
+          // Missing YouTube sizes sometimes return a 120px placeholder with HTTP 200.
+          if (source === "youtube" && image.naturalWidth <= 120 && fallbacks.length) retryImage();
+          else restoreScroll(source);
+        });
+        image.addEventListener("error", retryImage);
       }
       const card = el(
         "li",

@@ -275,7 +275,7 @@ test("YouTube thumbnail, title, and Enter open video in new tabs; c opens commen
   const app = setup();
   app.context.posts = [{
     source: "youtube", id: "yt_abcdefghijk", videoId: "abcdefghijk", title: "Video",
-    label: "Creator", published: "1 hour ago", image: "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg",
+    label: "Creator", published: "1 hour ago", image: "https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg",
     url: "https://www.youtube.com/watch?v=abcdefghijk", commentsUrl: "https://www.youtube.com/watch?v=abcdefghijk",
   }];
   vm.runInContext("render(posts)", app.context);
@@ -297,6 +297,28 @@ test("YouTube thumbnail, title, and Enter open video in new tabs; c opens commen
   assert.deepEqual(app.opened[0], [app.context.posts[0].url, "_blank", "noopener,noreferrer"]);
   app.press("c");
   assert.equal(app.opened[1][0], app.context.posts[0].commentsUrl);
+});
+
+test("YouTube thumbnails fall back for missing high resolution images and placeholders", () => {
+  const app = setup();
+  app.context.posts = [{
+    source: "youtube", id: "yt_abcdefghijk", videoId: "abcdefghijk", title: "Video",
+    label: "Creator", image: "https://i.ytimg.com/vi/abcdefghijk/maxresdefault.jpg",
+    url: "https://www.youtube.com/watch?v=abcdefghijk", commentsUrl: "https://www.youtube.com/watch?v=abcdefghijk",
+  }];
+  vm.runInContext("render(posts)", app.context);
+  const preview = app.feeds.youtube.children[0].querySelector(".video-preview");
+  const image = preview.children[0];
+  image.naturalWidth = 120;
+  image.handlers.load();
+  assert.equal(image.src, "https://i.ytimg.com/vi/abcdefghijk/sddefault.jpg");
+  image.handlers.error();
+  assert.equal(image.src, "https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg");
+  image.naturalWidth = 480;
+  image.handlers.load();
+  assert.equal(preview.removed, undefined);
+  image.handlers.error();
+  assert.equal(preview.removed, true);
 });
 
 test("YouTube column uses independent j/k navigation", () => {
