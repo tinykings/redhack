@@ -35,15 +35,16 @@ const pendingScroll = {};
 for (const source of Object.keys($feeds)) {
   const saved = savedView[source];
   currentPostIds[source] = typeof saved?.postId === "string" ? saved.postId : null;
-  pendingScroll[source] = Number.isFinite(saved?.scrollTop) ? Math.max(0, saved.scrollTop) : 0;
+  // Every page load starts at the top of both lists.
+  pendingScroll[source] = 0;
 }
 let activeSource = null;
 let saveTimer;
 
 function saveView() {
   const view = {};
-  for (const [source, feed] of Object.entries($feeds)) {
-    view[source] = { postId: currentPostIds[source], scrollTop: pendingScroll[source] ?? feed.scrollTop };
+  for (const source of Object.keys($feeds)) {
+    view[source] = { postId: currentPostIds[source] };
   }
   try { localStorage.setItem(VIEW_KEY, JSON.stringify(view)); } catch { /* Keep browsing without persistence. */ }
 }
@@ -72,7 +73,6 @@ for (const column of document.querySelectorAll(".feed-column")) {
   for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
     feed.addEventListener(type, () => { pendingScroll[source] = null; }, { passive: true });
   }
-  feed.addEventListener("scroll", scheduleSave, { passive: true });
 }
 window.addEventListener("pagehide", saveView);
 

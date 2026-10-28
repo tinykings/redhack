@@ -142,14 +142,16 @@ test("active cue follows hover; Enter and c open selected post/comments in new t
   assert.equal(opened.length, 2);
 });
 
-test("scroll and selection survive reload; user scrolling stops image restoration", () => {
+test("reload starts both lists at the top but keeps selection; user scrolling stops image restoration", () => {
   const app = setup(JSON.stringify({
     reddit: { postId: "reddit-1", scrollTop: 450 },
     hn: { postId: "hn-2", scrollTop: 230 },
   }));
+  app.feeds.reddit.scrollTop = 450;
+  app.feeds.hn.scrollTop = 230;
   vm.runInContext('restoreScroll("reddit"); restoreScroll("hn");', app.context);
-  assert.equal(app.feeds.reddit.scrollTop, 450);
-  assert.equal(app.feeds.hn.scrollTop, 230);
+  assert.equal(app.feeds.reddit.scrollTop, 0);
+  assert.equal(app.feeds.hn.scrollTop, 0);
   app.columns[0].handlers.pointerenter();
   app.press("Enter");
   assert.equal(app.opened[0][0], "https://example.com/reddit/1");
@@ -159,12 +161,12 @@ test("scroll and selection survive reload; user scrolling stops image restoratio
   assert.equal(app.feeds.reddit.scrollTop, 700);
   app.windowEvents.pagehide();
   const saved = JSON.parse(app.stored.get("feedView"));
-  assert.equal(saved.reddit.scrollTop, 700);
   assert.equal(saved.reddit.postId, "reddit-1");
-  assert.equal(saved.hn.scrollTop, 230);
+  assert.equal(saved.reddit.scrollTop, undefined);
   const reloaded = setup(app.stored.get("feedView"));
+  reloaded.feeds.reddit.scrollTop = 700;
   vm.runInContext('restoreScroll("reddit");', reloaded.context);
-  assert.equal(reloaded.feeds.reddit.scrollTop, 700);
+  assert.equal(reloaded.feeds.reddit.scrollTop, 0);
 });
 
 test("Reddit controls default to Best, persist Top timeframe, and reset only Reddit view", () => {
