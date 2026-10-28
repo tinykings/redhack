@@ -8,6 +8,7 @@ Browser extension combining top posts from your subscribed subreddits with Hacke
 - Removes duplicate URLs and fills remaining slots when one source runs short.
 - Reddit sort picker: **Best** (default, personalized home ranking), **Top** with timeframe, or **New**. Choice persists across reloads.
 - Caps Reddit posts at five per subreddit; excludes pinned and NSFW posts.
+- Remembers posts shown by earlier refreshes; when they appear again they move to the bottom of their column and are faded.
 - Shows scores, comment links, post ages, and available Reddit image previews.
 - Follows your system’s light or dark theme.
 - Caches results locally for 15 minutes. **Refresh** bypasses the cache.
@@ -57,6 +58,7 @@ Edit `CONFIG` in `sources.js`:
 | `redditTimeWindow` | `"day"` | Reddit ranking window: `hour`, `day`, `week`, `month`, `year`, or `all` |
 | `maxPerSubreddit` | `5` | Maximum posts selected per subreddit |
 | `subsPerRequest` | `50` | Subreddits combined into each Reddit listing request |
+| `seenHistory` | `2000` | Post ids remembered per source for marking repeats |
 
 Cache lifetime is controlled by `CACHE_TTL_MS` in `feed.js`. Reload the extension after editing, then reload the feed tab and click **Refresh**.
 
@@ -85,7 +87,7 @@ Tests mock network requests and cover Reddit previews, galleries, crossposts, di
 
 ## Permissions and data
 
-- `storage`: saves the feed cache in local extension storage.
+- `storage`: saves the feed cache and previously shown post ids in local extension storage.
 - `https://www.reddit.com/*`: reads subscriptions and top posts.
 - `https://hacker-news.firebaseio.com/*`: reads Hacker News top stories and story details.
 

@@ -1,12 +1,14 @@
 // Fetching and normalizing posts from Reddit and Hacker News.
 // Every post is normalized to:
 //   { source, id, title, url, commentsUrl, score, comments, created, label, image? }
+// markSeen() adds `seen: true|false`.
 
 export const CONFIG = {
   totalItems: 100,
   redditTimeWindow: "day", // hour | day | week | month | year | all
   maxPerSubreddit: 5, // keeps huge subs from crowding out small ones
   subsPerRequest: 50, // subreddits combined into one r/a+b+c request
+  seenHistory: 2000, // post ids remembered per source for marking repeats
 };
 
 const REDDIT = "https://www.reddit.com";
@@ -155,4 +157,21 @@ export function interleave(reddit, hn, total) {
     out.push(post);
   }
   return out;
+}
+
+// Flags posts already shown by an earlier fetch, then records this fetch's ids.
+// `seen` maps each source to its ids, oldest first, capped at `max` per source.
+export function markSeen(posts, seen = {}, max = CONFIG.seenHistory) {
+  const updated = {};
+  for (const [source, ids] of Object.entries(seen ?? {})) {
+    if (Array.isArray(ids)) updated[source] = ids;
+  }
+  const previous = Object.fromEntries(Object.entries(updated).map(([source, ids]) => [source, new Set(ids)]));
+  const marked = posts.map((p) => ({ ...p, seen: previous[p.source]?.has(p.id) ?? false }));
+  for (const source of new Set(posts.map((p) => p.source))) {
+    const current = posts.filter((p) => p.source === source).map((p) => p.id);
+    const currentSet = new Set(current);
+    updated[source] = [...(updated[source] ?? []).filter((id) => !currentSet.has(id)), ...current].slice(-max);
+  }
+  return { posts: marked, seen: updated };
 }

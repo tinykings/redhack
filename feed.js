@@ -1,6 +1,7 @@
-import { CONFIG, NotLoggedInError, fetchReddit, fetchHackerNews, interleave } from "./sources.js";
+import { CONFIG, NotLoggedInError, fetchReddit, fetchHackerNews, interleave, markSeen } from "./sources.js";
 
 const CACHE_KEY = "feedCache";
+const SEEN_KEY = "seenPosts";
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
 const $feeds = {
@@ -128,7 +129,10 @@ function el(tag, props = {}, ...children) {
 function render(posts) {
   for (const [source, feed] of Object.entries($feeds)) {
     pendingScroll[source] ??= feed.scrollTop;
-    feed.replaceChildren(...posts.filter((p) => p.source === source).map((p) => {
+    const sourcePosts = posts.filter((p) => p.source === source);
+    // Posts shown by an earlier refresh drop below the new ones.
+    const ordered = [...sourcePosts.filter((p) => !p.seen), ...sourcePosts.filter((p) => p.seen)];
+    feed.replaceChildren(...ordered.map((p) => {
       const domain = new URL(p.url).hostname.replace(/^www\./, "");
       const isDiscussion = p.url === p.commentsUrl;
       let preview = "";
@@ -153,7 +157,10 @@ function render(posts) {
       }
       const card = el(
         "li",
-        { className: `${p.source}${p.id === currentPostIds[source] ? " current" : ""}`, tabIndex: -1 },
+        {
+          className: `${p.source}${p.seen ? " seen" : ""}${p.id === currentPostIds[source] ? " current" : ""}`,
+          tabIndex: -1,
+        },
         preview,
         el("a", { className: "title", href: p.url, textContent: p.title }),
         isDiscussion ? "" : el("span", { className: "domain", textContent: domain }),
@@ -220,11 +227,14 @@ async function load({ force = false } = {}) {
   }
   if (hn.status === "rejected") console.error("Hacker News fetch failed:", hn.reason);
 
-  const posts = interleave(
+  const { [SEEN_KEY]: storedSeen } = await chrome.storage.local.get(SEEN_KEY);
+  if (version !== loadVersion) return;
+  const { posts, seen } = markSeen(interleave(
     reddit.status === "fulfilled" ? reddit.value : [],
     hn.status === "fulfilled" ? hn.value : [],
     CONFIG.totalItems
-  );
+  ), storedSeen);
+  await chrome.storage.local.set({ [SEEN_KEY]: seen });
 
   // Only replace a good cache when both sources came back.
   if (reddit.status === "fulfilled" && hn.status === "fulfilled") {

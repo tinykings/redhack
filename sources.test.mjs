@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fetchReddit } from "./sources.js";
+import { fetchReddit, markSeen } from "./sources.js";
 
 test("Reddit sort uses personalized Best, score-ranked Top with timeframe, and chronological New", async () => {
   const originalFetch = globalThis.fetch;
@@ -78,4 +78,17 @@ test("Reddit images: previews, galleries, crossposts, fallbacks, and missing ima
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test("markSeen flags repeats per source and keeps a capped history", () => {
+  const post = (source, id) => ({ source, id });
+  const first = markSeen([post("reddit", "a"), post("hn", "a")], undefined, 3);
+  assert.deepEqual(first.posts.map((p) => p.seen), [false, false]);
+  const second = markSeen([post("reddit", "b"), post("reddit", "a"), post("hn", "c")], first.seen, 3);
+  assert.deepEqual(second.posts.map((p) => p.seen), [false, true, false]);
+  assert.deepEqual(second.seen, { reddit: ["b", "a"], hn: ["a", "c"] });
+  const third = markSeen([post("reddit", "c"), post("reddit", "d")], second.seen, 3);
+  assert.deepEqual(third.seen.reddit, ["a", "c", "d"]);
+  assert.deepEqual(third.seen.hn, ["a", "c"]);
+  assert.deepEqual(markSeen([post("hn", "x")], { hn: "corrupt" }).posts[0].seen, false);
 });

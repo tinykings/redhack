@@ -168,6 +168,11 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 .post-list li.hn { background: var(--hn-card-bg); }
 
+/* Already shown by an earlier refresh. */
+.post-list li.seen { opacity: 0.55; transition: opacity 0.15s; }
+.post-list li.seen:hover,
+.post-list li.seen.current { opacity: 1; }
+
 .post-list li.current {
   outline: 3px solid var(--selection);
   outline-offset: 2px;
