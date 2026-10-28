@@ -52,6 +52,7 @@ header {
   border-bottom: 1px solid var(--line);
 }
 
+.app-icon { display: block; flex-shrink: 0; }
 h1 { margin: 0; font-size: 20px; }
 #status { flex: 1; color: var(--muted); font-size: 15px; }
 
