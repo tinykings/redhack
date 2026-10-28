@@ -12,8 +12,9 @@
     <span id="status"></span>
     <button id="refresh" type="button">Refresh</button>
   </header>
+  <p id="keyboard-help">Hover a column: j/k navigate · Enter opens post · c opens comments (new tabs)</p>
   <div id="notice" hidden></div>
-  <main id="feeds" title="Hover a column: j/k navigate · Enter opens post · c opens comments (new tabs)">
+  <main id="feeds" aria-describedby="keyboard-help">
     <section class="feed-column" data-source="reddit" aria-labelledby="reddit-heading">
       <div class="feed-heading">
         <h2 id="reddit-heading">Reddit</h2>

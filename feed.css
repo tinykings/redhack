@@ -67,6 +67,14 @@ button {
 }
 button:disabled { opacity: 0.5; cursor: default; }
 
+#keyboard-help {
+  flex-shrink: 0;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: right;
+}
+
 #notice {
   margin: 16px 0;
   padding: 10px 14px;
