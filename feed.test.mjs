@@ -12,7 +12,10 @@ function setup(savedView = null, savedOptions = null) {
       getBoundingClientRect: () => ({ top: 100 }),
       scrollTo(options) { this.lastScroll = options; this.scrollTop = options.top; },
       handlers: {},
-      addEventListener(type, handler) { this.handlers[type] = handler; },
+      addEventListener(type, handler) {
+        const previous = this.handlers[type];
+        this.handlers[type] = (...args) => { previous?.(...args); handler(...args); };
+      },
       children: [0, 1, 2].map((index) => {
         const card = {
           dataset: {
@@ -24,7 +27,12 @@ function setup(savedView = null, savedOptions = null) {
           focus(options) { this.focusOptions = options; },
           getBoundingClientRect: () => ({ top: 200 - feed.scrollTop }),
         };
-        card.classList = { toggle(name, value) { card.selected = value; } };
+        card.classList = {
+          toggle(name, value) {
+            if (name === "current") card.selected = value;
+            if (name === "keyboard-dimmed") card.dimmed = value;
+          },
+        };
         return card;
       }),
     };
@@ -198,5 +206,33 @@ test("invalid saved state falls back safely", () => {
     vm.runInContext('restoreScroll("reddit"); restoreScroll("hn");', app.context);
     assert.equal(app.feeds.reddit.scrollTop, 0);
     assert.equal(app.feeds.hn.scrollTop, 0);
+  }
+});
+
+test("keyboard navigation fades both lists; manual scrolling either list clears fade", () => {
+  const { feeds, columns, press } = setup();
+  const allCards = [...feeds.reddit.children, ...feeds.hn.children];
+  function assertFade(selected) {
+    for (const card of allCards) assert.equal(card.dimmed, card !== selected);
+  }
+  columns[0].handlers.pointerenter();
+  press("j");
+  assertFade(feeds.reddit.children[0]);
+  feeds.reddit.handlers.scroll(); // Delayed keyboard scroll event must keep fade.
+  assertFade(feeds.reddit.children[0]);
+  press("j");
+  assertFade(feeds.reddit.children[1]);
+  columns[0].handlers.pointerleave();
+  columns[1].handlers.pointerenter();
+  press("j");
+  assertFade(feeds.hn.children[0]);
+  for (const source of ["reddit", "hn"]) {
+    for (const type of ["wheel", "touchmove", "scroll"]) {
+      press("k");
+      assertFade(feeds.hn.children[0]);
+      if (type === "scroll") feeds[source].scrollTop += 20;
+      feeds[source].handlers[type]();
+      for (const card of allCards) assert.equal(card.dimmed, false);
+    }
   }
 });

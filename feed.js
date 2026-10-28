@@ -39,7 +39,19 @@ for (const source of Object.keys($feeds)) {
   pendingScroll[source] = 0;
 }
 let activeSource = null;
+let keyboardSource = null;
+const scrollPositions = {};
 let saveTimer;
+
+function updateKeyboardFade(source = null) {
+  keyboardSource = source;
+  for (const [name, feed] of Object.entries($feeds)) {
+    for (const card of feed.children) {
+      card.classList.toggle("keyboard-dimmed", source !== null
+        && (name !== source || card.dataset.postId !== currentPostIds[source]));
+    }
+  }
+}
 
 function saveView() {
   const view = {};
@@ -55,7 +67,10 @@ function scheduleSave() {
 }
 
 function restoreScroll(source) {
-  if (pendingScroll[source] !== null) $feeds[source].scrollTop = pendingScroll[source];
+  if (pendingScroll[source] !== null) {
+    $feeds[source].scrollTop = pendingScroll[source];
+    scrollPositions[source] = $feeds[source].scrollTop;
+  }
 }
 
 for (const column of document.querySelectorAll(".feed-column")) {
@@ -69,6 +84,18 @@ for (const column of document.querySelectorAll(".feed-column")) {
     activeSource = null;
     column.classList.remove("active-column");
   });
+  scrollPositions[source] = feed.scrollTop;
+  feed.addEventListener("scroll", () => {
+    // Keyboard navigation and image restoration record their own scroll positions.
+    if (feed.scrollTop !== scrollPositions[source]) {
+      pendingScroll[source] = null;
+      updateKeyboardFade();
+    }
+    scrollPositions[source] = feed.scrollTop;
+  }, { passive: true });
+  for (const type of ["wheel", "touchmove"]) {
+    feed.addEventListener(type, () => updateKeyboardFade(), { passive: true });
+  }
   // Stop delayed image restoration as soon as the user takes control.
   for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
     feed.addEventListener(type, () => { pendingScroll[source] = null; }, { passive: true });
@@ -101,11 +128,13 @@ function navigatePosts(event) {
   const card = cards[next];
   for (const item of cards) item.classList.toggle("current", item === card);
   currentPostIds[source] = card.dataset.postId;
+  updateKeyboardFade(source);
   card.focus({ preventScroll: true });
   feed.scrollTo({
     top: feed.scrollTop + card.getBoundingClientRect().top - feed.getBoundingClientRect().top - feed.clientTop - 6,
     behavior: "instant",
   });
+  scrollPositions[source] = feed.scrollTop;
   scheduleSave();
 }
 
@@ -180,6 +209,7 @@ function render(posts) {
     }));
     restoreScroll(source);
   }
+  updateKeyboardFade(keyboardSource);
 }
 
 function showNotice(...content) {
@@ -253,6 +283,7 @@ function changeRedditOptions() {
   redditOptions = { sort: $redditSort.value, timeframe: $redditTimeframe.value };
   $redditTimeframe.hidden = redditOptions.sort !== "top";
   try { localStorage.setItem(REDDIT_OPTIONS_KEY, JSON.stringify(redditOptions)); } catch { /* Keep browsing. */ }
+  updateKeyboardFade();
   currentPostIds.reddit = null;
   pendingScroll.reddit = 0;
   $feeds.reddit.replaceChildren();

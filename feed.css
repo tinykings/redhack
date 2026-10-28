@@ -164,14 +164,22 @@ button:disabled { opacity: 0.5; cursor: default; }
   background: var(--card-bg);
   border: 1px solid var(--line);
   border-radius: 10px;
+  transition: opacity 0.15s;
 }
 
 .post-list li.hn { background: var(--hn-card-bg); }
 
 /* Already shown by an earlier refresh. */
-.post-list li.seen { opacity: 0.55; transition: opacity 0.15s; }
+.post-list li.seen { opacity: 0.55; }
 .post-list li.seen:hover,
 .post-list li.seen.current { opacity: 1; }
+
+/* Keyboard focus dims every other card, including the other column's selection. */
+.post-list li.keyboard-dimmed { opacity: 0.25; }
+
+@media (prefers-reduced-motion: reduce) {
+  .post-list li { transition: none; }
+}
 
 .post-list li.current {
   outline: 3px solid var(--selection);
