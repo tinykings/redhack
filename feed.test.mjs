@@ -106,6 +106,14 @@ function setup(savedView = null, savedOptions = null) {
   return { feeds, columns, press, stored, windowEvents, opened, context, controls };
 }
 
+test("links open in a new tab with opener protection", () => {
+  const { context } = setup();
+  const link = vm.runInContext('el("a", { href: "https://example.com", textContent: "Link" })', context);
+  assert.equal(link.target, "_blank");
+  assert.equal(link.rel, "noopener noreferrer");
+  assert.equal(link.href, "https://example.com");
+});
+
 test("j/k follow hovered column, preserve independent selection, and scroll only that list", () => {
   const { feeds, columns, press } = setup();
   assert.equal(press("j").prevented, undefined);

@@ -150,7 +150,8 @@ function compact(n) {
 }
 
 function el(tag, props = {}, ...children) {
-  const node = Object.assign(document.createElement(tag), props);
+  const node = Object.assign(document.createElement(tag),
+    tag === "a" ? { target: "_blank", rel: "noopener noreferrer" } : {}, props);
   node.append(...children);
   return node;
 }
