@@ -157,7 +157,32 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
+// Cached cards need the same validation as newly fetched ones. Only resolve
+// explicit relative paths; arbitrary text must not become a plausible site URL.
+function normalizePosts(posts) {
+  const origins = { reddit: "https://www.reddit.com", hn: "https://news.ycombinator.com", youtube: "https://www.youtube.com" };
+  function link(value, base) {
+    if (typeof value !== "string" || !value.trim()) return null;
+    const trimmed = value.trim();
+    if (!/^(?:https?:\/\/|\/|\.{1,2}\/|\?)/i.test(trimmed)) return null;
+    try {
+      const url = new URL(trimmed, base);
+      return ["http:", "https:"].includes(url.protocol) ? url.href : null;
+    } catch {
+      return null;
+    }
+  }
+  return (Array.isArray(posts) ? posts : []).flatMap((post) => {
+    const base = origins[post?.source];
+    if (!base) return [];
+    const commentsUrl = link(post.commentsUrl, base);
+    const url = link(post.url, base) ?? commentsUrl;
+    return url ? [{ ...post, url, commentsUrl: commentsUrl ?? url }] : [];
+  });
+}
+
 function render(posts) {
+  posts = normalizePosts(posts);
   for (const [source, feed] of Object.entries($feeds)) {
     pendingScroll[source] ??= feed.scrollTop;
     const sourcePosts = posts.filter((p) => p.source === source);
@@ -244,7 +269,8 @@ async function load({ force = false } = {}) {
   $notice.replaceChildren();
   const { [CACHE_KEY]: storedCache } = await chrome.storage.local.get(CACHE_KEY);
   if (version !== loadVersion) return;
-  const cache = storedCache?.redditCacheKey === redditCacheKey ? storedCache : null;
+  const cache = storedCache?.redditCacheKey === redditCacheKey
+    ? { ...storedCache, posts: normalizePosts(storedCache.posts) } : null;
   if (cache) render(cache.posts);
   if (!force && cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) {
     $status.textContent = `Updated ${timeAgo(cache.fetchedAt / 1000)}`;
@@ -293,14 +319,14 @@ async function load({ force = false } = {}) {
 
   const { [SEEN_KEY]: storedSeen } = await chrome.storage.local.get(SEEN_KEY);
   if (version !== loadVersion) return;
-  const fresh = [
+  const fresh = normalizePosts([
     ...interleave(
       reddit.status === "fulfilled" ? reddit.value : [],
       hn.status === "fulfilled" ? hn.value : [],
       CONFIG.totalItems
     ),
     ...(youtube.status === "fulfilled" ? youtube.value : []),
-  ];
+  ]);
   const marked = markSeen(fresh, storedSeen);
   const seen = marked.seen;
   const results = { reddit, hn, youtube };

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { interleave, markSeen } from "./sources.js";
 
 function setup(savedView = null, savedOptions = null) {
   function makeFeed(prefix) {
@@ -59,7 +60,7 @@ function setup(savedView = null, savedOptions = null) {
   const windowEvents = {};
   const opened = [];
   const context = vm.createContext({
-    CONFIG: { redditTimeWindow: "day" },
+    CONFIG: { redditTimeWindow: "day", totalItems: 100 },
     URL,
     localStorage: {
       getItem: (key) => stored.get(key) ?? null,
@@ -117,6 +118,73 @@ test("links open in a new tab with opener protection", () => {
   assert.equal(link.target, "_blank");
   assert.equal(link.rel, "noopener noreferrer");
   assert.equal(link.href, "https://example.com");
+});
+
+test("render repairs relative and missing links and drops unrenderable posts", () => {
+  const app = setup();
+  const cases = [
+    ["reddit", "/r/test/post", "/r/test/comments/post", "https://www.reddit.com/r/test/post", "https://www.reddit.com/r/test/comments/post"],
+    ["youtube", "/watch?v=abcdefghijk", undefined, "https://www.youtube.com/watch?v=abcdefghijk", "https://www.youtube.com/watch?v=abcdefghijk"],
+    ["hn", "item?id=123", "/item?id=123", "https://news.ycombinator.com/item?id=123", "https://news.ycombinator.com/item?id=123"],
+    ["reddit", undefined, "/comments/test", "https://www.reddit.com/comments/test", "https://www.reddit.com/comments/test"],
+    ["reddit", "https://[invalid", "/comments/test", "https://www.reddit.com/comments/test", "https://www.reddit.com/comments/test"],
+    ["hn", " http://example.com/post ", "javascript:alert(1)", "http://example.com/post", "http://example.com/post"],
+    ["reddit", "javascript:alert(1)", "/comments/test", "https://www.reddit.com/comments/test", "https://www.reddit.com/comments/test"],
+    ["reddit", "//example.com/post", undefined, "https://example.com/post", "https://example.com/post"],
+    ["reddit", "./post", undefined, "https://www.reddit.com/post", "https://www.reddit.com/post"],
+  ];
+  app.context.posts = cases.map(([source, url, commentsUrl], id) => ({
+    source, id: String(id), title: "Post", url, commentsUrl, image: "https://example.com/preview.jpg",
+  })).concat([null, { source: "unknown", url: "https://example.com" },
+    ...[undefined, null, "", " ", {}, "not a URL", "https://[", "javascript:alert(1)", "data:text/html,test", "ftp://example.com"].map((url) => ({ source: "reddit", url })),
+  ]);
+  vm.runInContext("render(posts)", app.context);
+  assert.equal(Object.values(app.feeds).reduce((count, feed) => count + feed.children.length, 0), cases.length);
+  cases.forEach(([source, , , url, commentsUrl], id) => {
+    const card = app.feeds[source].children.find((node) => node.dataset.postId === String(id));
+    assert.equal(card.dataset.url, url);
+    assert.equal(card.dataset.commentsUrl, commentsUrl);
+    assert.equal(card.querySelector(".title").href, url);
+    assert.equal(card.children[0].href, url);
+  });
+  app.columns[0].handlers.pointerenter();
+  vm.runInContext('currentPostIds.reddit = "3"', app.context);
+  app.press("Enter");
+  app.press("c");
+  assert.equal(app.opened[0][0], "https://www.reddit.com/comments/test");
+  assert.equal(app.opened[1][0], "https://www.reddit.com/comments/test");
+});
+
+test("load survives invalid cached URLs and validates refreshed posts before saving", async () => {
+  const app = setup();
+  const cached = [
+    { source: "reddit", id: "bad", url: "https://[" },
+    { source: "reddit", id: "fallback", commentsUrl: "/comments/cached" },
+  ];
+  let cache = { redditCacheKey: "best", fetchedAt: Date.now(), posts: cached };
+  const writes = {};
+  app.context.chrome.storage.local = {
+    get: async (key) => ({ [key]: key === "feedCacheV4" ? cache : {} }),
+    set: async (value) => Object.assign(writes, value),
+  };
+  await vm.runInContext("load()", app.context);
+  assert.equal(app.feeds.reddit.children.length, 1);
+  assert.equal(app.feeds.reddit.children[0].dataset.url, "https://www.reddit.com/comments/cached");
+  const fresh = [
+    { source: "reddit", id: "invalid", url: "not a URL" },
+    { source: "reddit", id: "fresh", url: "/post", commentsUrl: "/comments/fresh" },
+  ];
+  Object.assign(app.context, {
+    fetchReddit: async () => fresh, fetchHackerNews: async () => [], fetchYouTube: async () => [],
+    interleave, markSeen,
+  });
+  await vm.runInContext("load({ force: true })", app.context);
+  assert.equal(writes.feedCacheV4.posts.length, 1);
+  assert.equal(writes.feedCacheV4.posts[0].url, "https://www.reddit.com/post");
+  assert.deepEqual(Array.from(writes.seenPosts.reddit), ["fresh"]);
+  assert.equal(app.feeds.reddit.children[0].dataset.postId, "fresh");
+  assert.equal(vm.runInContext("$refresh.disabled", app.context), false);
+  assert.match(vm.runInContext("$status.textContent", app.context), /^1 Reddit/);
 });
 
 test("j/k follow hovered column, preserve independent selection, and scroll only that list", () => {
